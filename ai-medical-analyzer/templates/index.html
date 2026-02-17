@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Medical Report Analyzer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center;}
+        .hero-card {background: white; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); padding: 50px;}
+        .btn-custom {background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; padding: 12px 40px;}
+        h1 {color: #667eea; margin-bottom: 20px;}
+        .feature-icon {font-size: 3em; color: #667eea; margin-bottom: 15px;}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-10">
+                <div class="hero-card text-center">
+                    <h1><i class="fas fa-heartbeat"></i> AI Medical Report Analyzer</h1>
+                    <p class="lead">Upload your medical reports and get instant AI-powered analysis</p>
+                    <p class="text-success"><strong>100% FREE - No API Costs!</strong></p>
+                    <div class="row mt-5">
+                        <div class="col-md-4">
+                            <i class="fas fa-upload feature-icon"></i>
+                            <h5>Upload Reports</h5>
+                            <p>PDF or Image formats supported</p>
+                        </div>
+                        <div class="col-md-4">
+                            <i class="fas fa-brain feature-icon"></i>
+                            <h5>AI Analysis</h5>
+                            <p>Intelligent report processing</p>
+                        </div>
+                        <div class="col-md-4">
+                            <i class="fas fa-chart-line feature-icon"></i>
+                            <h5>Health Insights</h5>
+                            <p>Personalized recommendations</p>
+                        </div>
+                    </div>
+                    <div class="mt-5">
+                        <a href="{{ url_for('login') }}" class="btn btn-custom btn-lg text-white me-3">
+                            <i class="fas fa-sign-in-alt"></i> Login
+                        </a>
+                        <a href="{{ url_for('register') }}" class="btn btn-outline-primary btn-lg">
+                            <i class="fas fa-user-plus"></i> Register
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
