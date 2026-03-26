@@ -16,18 +16,23 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 app.config['ALLOWED_EXTENSIONS'] = {'pdf', 'png', 'jpg', 'jpeg'}
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+
 def get_db_connection():
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
     return conn
+
 
 def normalize_report_filepaths(conn):
     reports = conn.execute('SELECT id, filename, filepath FROM reports').fetchall()
     for report in reports:
         normalized_path = os.path.join(app.config['UPLOAD_FOLDER'], report['filename'])
         if report['filepath'] != normalized_path:
-            conn.execute('UPDATE reports SET filepath = ? WHERE id = ?',
-                        (normalized_path, report['id']))
+            conn.execute(
+                'UPDATE reports SET filepath = ? WHERE id = ?',
+                (normalized_path, report['id'])
+            )
+
 
 def migrate_legacy_storage():
     project_root = os.path.dirname(BASE_DIR)
@@ -52,29 +57,38 @@ def migrate_legacy_storage():
             if os.path.isfile(source_path) and not os.path.exists(target_path):
                 shutil.copy2(source_path, target_path)
 
+
 def init_db():
     conn = get_db_connection()
-    conn.execute('''CREATE TABLE IF NOT EXISTS users (
+    conn.execute(
+        '''CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
         email TEXT UNIQUE NOT NULL, mobile TEXT, password TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    conn.execute('''CREATE TABLE IF NOT EXISTS reports (
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)'''
+    )
+    conn.execute(
+        '''CREATE TABLE IF NOT EXISTS reports (
         id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
         filename TEXT NOT NULL, filepath TEXT NOT NULL, file_type TEXT NOT NULL,
         upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP, analyzed BOOLEAN DEFAULT 0,
-        FOREIGN KEY (user_id) REFERENCES users (id))''')
-    conn.execute('''CREATE TABLE IF NOT EXISTS analysis_results (
+        FOREIGN KEY (user_id) REFERENCES users (id))'''
+    )
+    conn.execute(
+        '''CREATE TABLE IF NOT EXISTS analysis_results (
         id INTEGER PRIMARY KEY AUTOINCREMENT, report_id INTEGER NOT NULL,
         extracted_text TEXT, medical_values TEXT, abnormal_findings TEXT,
         risk_level TEXT, suggestions TEXT,
         analysis_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (report_id) REFERENCES reports (id))''')
+        FOREIGN KEY (report_id) REFERENCES reports (id))'''
+    )
     normalize_report_filepaths(conn)
     conn.commit()
     conn.close()
 
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+
 
 def login_required(f):
     @wraps(f)
@@ -83,16 +97,21 @@ def login_required(f):
             flash('Please login', 'warning')
             return redirect(url_for('login'))
         return f(*args, **kwargs)
+
     return decorated_function
+
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
+
 def is_valid_email(email):
     return bool(re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email))
 
+
 def is_valid_indian_mobile(mobile):
     return bool(re.fullmatch(r'[6-9]\d{9}', mobile))
+
 
 def extract_attention_items(abnormal_findings):
     if not abnormal_findings:
@@ -108,6 +127,7 @@ def extract_attention_items(abnormal_findings):
         if cleaned:
             items.append(cleaned)
     return items
+
 
 def get_medical_term_library():
     return [
@@ -173,6 +193,23 @@ def get_medical_term_library():
         },
     ]
 
+
+def find_medical_term_details(label):
+    if not label:
+        return None
+
+    label_lower = label.lower()
+    for item in get_medical_term_library():
+        tokens = [item['term'].lower(), *[alias.lower() for alias in item['aliases']]]
+        if any(token in label_lower or label_lower in token for token in tokens):
+            return {
+                'term': item['term'],
+                'meaning': item['meaning'],
+                'why_it_matters': item['why_it_matters']
+            }
+    return None
+
+
 def extract_report_terms(report):
     text = ' '.join([
         report['medical_values'] or '',
@@ -189,6 +226,7 @@ def extract_report_terms(report):
                 'why_it_matters': item['why_it_matters']
             })
     return found_terms[:5]
+
 
 def annotate_medical_text(text):
     if not text:
@@ -220,9 +258,11 @@ def annotate_medical_text(text):
     html = ''.join(str(part) for part in parts).replace('\n', '<br>')
     return Markup(html)
 
+
 def parse_medical_values(text):
     if not text:
         return []
+
     values = []
     blocks = [block.strip() for block in text.split('\n\n') if 'Status:' in block and ':' in block]
 
@@ -240,12 +280,17 @@ def parse_medical_values(text):
             continue
 
         status = status_match.group('status').upper()
+        test_name = value_match.group('test').strip()
+        term_details = find_medical_term_details(test_name)
+
         values.append({
-            'test': value_match.group('test').strip(),
+            'test': test_name,
             'value': value_match.group('value').strip(),
             'unit': value_match.group('unit').strip(),
             'range': range_match.group('range').strip(),
             'status': status,
+            'meaning': term_details['meaning'] if term_details else 'This test gives a simple clue about how this part of the body is doing.',
+            'why_it_matters': term_details['why_it_matters'] if term_details else 'A doctor can tell whether this result matters after comparing it with your age, symptoms, and other tests.',
             'status_class': {
                 'HIGH': 'danger',
                 'LOW': 'warning',
@@ -254,28 +299,111 @@ def parse_medical_values(text):
         })
     return values
 
-def build_local_language_support(report, guidance):
+
+def build_local_language_support(report, guidance, structured_values):
     risk_level = (report['risk_level'] or 'LOW').upper()
-    hindi_summary = {
-        'HIGH': 'रिपोर्ट में कुछ मान सामान्य सीमा से बाहर हो सकते हैं। कृपया डॉक्टर को जल्द दिखाएं।',
-        'MEDIUM': 'रिपोर्ट में कुछ मानों को डॉक्टर से समझना जरूरी हो सकता है। घबराने की जरूरत नहीं, लेकिन फॉलो-अप करें।',
-        'LOW': 'रिपोर्ट में अभी कोई बड़ा जोखिम संकेत नहीं दिख रहा, लेकिन मेडिकल शब्द समझना फिर भी जरूरी है।'
+    language_data = {
+        'en': {
+            'label': 'English',
+            'title': 'Translated support for patients and family',
+            'summary': {
+                'HIGH': 'This report has values that may need quick doctor guidance. Share this simple summary with your family if they help with care.',
+                'MEDIUM': 'This report has some values that should be discussed with a doctor. A translated summary can make that conversation easier.',
+                'LOW': 'This report does not show a major danger sign right now, but translated guidance can still help everyone understand the result.'
+            },
+            'questions_title': 'Questions to ask my doctor',
+            'values_title': 'Simple explanation of important values',
+            'copy_label': 'Copy translation'
+        },
+        'hi': {
+            'label': 'हिंदी',
+            'title': 'रिपोर्ट का आसान हिंदी सारांश',
+            'summary': {
+                'HIGH': 'इस रिपोर्ट में कुछ मान सामान्य सीमा से बाहर हो सकते हैं। कृपया डॉक्टर को जल्दी दिखाएं और यह सारांश परिवार के साथ साझा करें।',
+                'MEDIUM': 'इस रिपोर्ट के कुछ मान डॉक्टर से समझना जरूरी हो सकता है। घबराने की जरूरत नहीं, लेकिन फॉलो-अप करें।',
+                'LOW': 'इस रिपोर्ट में अभी कोई बड़ा खतरे का संकेत नहीं दिख रहा, लेकिन आसान भाषा में समझना फिर भी उपयोगी है।'
+            },
+            'questions_title': 'डॉक्टर से पूछने वाले सवाल',
+            'values_title': 'महत्वपूर्ण वैल्यू का आसान मतलब',
+            'copy_label': 'अनुवाद कॉपी करें'
+        },
+        'mr': {
+            'label': 'मराठी',
+            'title': 'रिपोर्टचा सोपा मराठी सारांश',
+            'summary': {
+                'HIGH': 'या रिपोर्टमधील काही मूल्ये सामान्य मर्यादेबाहेर असू शकतात. कृपया डॉक्टरांना लवकर दाखवा आणि हा सारांश कुटुंबासोबत शेअर करा.',
+                'MEDIUM': 'या रिपोर्टमधील काही मूल्यांबद्दल डॉक्टरांशी बोलणे गरजेचे असू शकते. घाबरू नका, पण फॉलो-अप करा.',
+                'LOW': 'या रिपोर्टमध्ये आत्ता मोठा धोक्याचा इशारा दिसत नाही, पण सोप्या भाषेत समजून घेणे तरीही उपयोगाचे आहे.'
+            },
+            'questions_title': 'डॉक्टरांना विचारायचे प्रश्न',
+            'values_title': 'महत्त्वाच्या चाचण्यांचा सोपा अर्थ',
+            'copy_label': 'भाषांतर कॉपी करा'
+        }
     }
 
-    hindi_questions = [
-        'इस रिपोर्ट में सबसे महत्वपूर्ण वैल्यू कौन-सी है?',
-        'क्या मुझे यह टेस्ट दोबारा कराना चाहिए?',
-        'मुझे किन लक्षणों पर तुरंत डॉक्टर से संपर्क करना चाहिए?'
-    ]
+    translated_questions = {
+        'en': list(guidance['doctor_questions']),
+        'hi': [
+            'इस रिपोर्ट में मेरे लिए सबसे महत्वपूर्ण वैल्यू कौन-सी है?',
+            'क्या मुझे यह टेस्ट दोबारा कराना चाहिए या किसी विशेषज्ञ को दिखाना चाहिए?',
+            'इस रिपोर्ट के बाद मुझे किन लक्षणों पर तुरंत ध्यान देना चाहिए?'
+        ],
+        'mr': [
+            'या रिपोर्टमधील माझ्यासाठी सर्वात महत्त्वाची वैल्यू कोणती आहे?',
+            'मला ही चाचणी पुन्हा करावी लागेल का किंवा तज्ज्ञ डॉक्टरांना भेटावे लागेल का?',
+            'या रिपोर्टनंतर कोणती लक्षणे दिसली तर लगेच डॉक्टरांशी संपर्क करावा?'
+        ]
+    }
 
     if guidance['attention_items']:
-        hindi_questions.insert(0, f"कृपया मुझे {', '.join(guidance['attention_items'][:3])} का मतलब आसान भाषा में समझाइए।")
+        top_items = ', '.join(guidance['attention_items'][:3])
+        translated_questions['hi'].insert(0, f'कृपया मुझे {top_items} का मतलब आसान भाषा में समझाइए।')
+        translated_questions['mr'].insert(0, f'कृपया {top_items} याचा अर्थ मला सोप्या भाषेत समजावून सांगा.')
+
+    status_translation = {
+        'en': {'LOW': 'Low', 'NORMAL': 'Normal', 'HIGH': 'High'},
+        'hi': {'LOW': 'कम', 'NORMAL': 'सामान्य', 'HIGH': 'ज्यादा'},
+        'mr': {'LOW': 'कमी', 'NORMAL': 'सामान्य', 'HIGH': 'जास्त'}
+    }
+
+    value_templates = {
+        'en': '{test}: {value} {unit}. Status: {status}. Normal range: {range}. Meaning: {meaning}',
+        'hi': '{test}: {value} {unit}. स्थिति: {status}. सामान्य सीमा: {range}. मतलब: {meaning}',
+        'mr': '{test}: {value} {unit}. स्थिती: {status}. सामान्य श्रेणी: {range}. अर्थ: {meaning}'
+    }
+
+    values_by_language = {}
+    for language_code, template in value_templates.items():
+        values_by_language[language_code] = [
+            template.format(
+                test=item['test'],
+                value=item['value'],
+                unit=item['unit'],
+                status=status_translation[language_code].get(item['status'], item['status']),
+                range=item['range'],
+                meaning=item['meaning']
+            )
+            for item in structured_values[:6]
+        ]
 
     return {
-        'title': 'परिवार के लिए आसान हिंदी मदद',
-        'summary': hindi_summary.get(risk_level, hindi_summary['LOW']),
-        'questions': hindi_questions
+        'title': 'Translation Help for Patients and Family',
+        'options': [
+            {
+                'code': code,
+                'label': config['label'],
+                'title': config['title'],
+                'summary': config['summary'].get(risk_level, config['summary']['LOW']),
+                'questions_title': config['questions_title'],
+                'values_title': config['values_title'],
+                'copy_label': config['copy_label'],
+                'questions': translated_questions[code],
+                'values': values_by_language[code]
+            }
+            for code, config in language_data.items()
+        ]
     }
+
 
 def build_patient_guidance(report):
     risk_level = (report['risk_level'] or 'LOW').upper()
@@ -295,13 +423,6 @@ def build_patient_guidance(report):
         'LOW': 'Simple meaning: no strong danger signal was found by the app, but this is still not the same as a doctor giving final confirmation.'
     }
 
-    patient_features = [
-        'Explain every medical term in simple language beside the result.',
-        'Show whether each value is low, normal, or high with color labels.',
-        'Add a one-click "Questions to ask my doctor" list for this report.',
-        'Offer a local-language translation option for patients and family members.'
-    ]
-
     doctor_questions = [
         'Which value in this report is most important for me?',
         'Do I need repeat tests, treatment, or a specialist doctor?',
@@ -316,13 +437,14 @@ def build_patient_guidance(report):
         'simple_explanation': simple_explanation_map.get(risk_level, simple_explanation_map['LOW']),
         'attention_items': attention_items,
         'known_terms': known_terms,
-        'doctor_questions': doctor_questions,
-        'patient_features': patient_features
+        'doctor_questions': doctor_questions
     }
+
 
 @app.route('/')
 def index():
     return render_template('index.html')
+
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -355,13 +477,16 @@ def register():
             flash('Email already registered', 'danger')
             conn.close()
             return render_template('register.html', form_data=form_data)
-        conn.execute('INSERT INTO users (name, email, mobile, password) VALUES (?, ?, ?, ?)',
-                    (name, email, mobile, hash_password(password)))
+        conn.execute(
+            'INSERT INTO users (name, email, mobile, password) VALUES (?, ?, ?, ?)',
+            (name, email, mobile, hash_password(password))
+        )
         conn.commit()
         conn.close()
         flash('Registration successful!', 'success')
         return redirect(url_for('login'))
     return render_template('register.html', form_data=form_data)
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -379,27 +504,40 @@ def login():
         flash('Invalid credentials', 'danger')
     return render_template('login.html')
 
+
 @app.route('/logout')
 def logout():
     session.clear()
     flash('Logged out', 'info')
     return redirect(url_for('index'))
 
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
     conn = get_db_connection()
-    total = conn.execute('SELECT COUNT(*) as c FROM reports WHERE user_id = ?', 
-                        (session['user_id'],)).fetchone()['c']
-    analyzed = conn.execute('SELECT COUNT(*) as c FROM reports WHERE user_id = ? AND analyzed = 1',
-                           (session['user_id'],)).fetchone()['c']
-    recent = conn.execute('''SELECT r.*, a.risk_level FROM reports r 
-                            LEFT JOIN analysis_results a ON r.id = a.report_id 
-                            WHERE r.user_id = ? ORDER BY r.upload_date DESC LIMIT 5''',
-                         (session['user_id'],)).fetchall()
+    total = conn.execute(
+        'SELECT COUNT(*) as c FROM reports WHERE user_id = ?',
+        (session['user_id'],)
+    ).fetchone()['c']
+    analyzed = conn.execute(
+        'SELECT COUNT(*) as c FROM reports WHERE user_id = ? AND analyzed = 1',
+        (session['user_id'],)
+    ).fetchone()['c']
+    recent = conn.execute(
+        '''SELECT r.*, a.risk_level FROM reports r
+        LEFT JOIN analysis_results a ON r.id = a.report_id
+        WHERE r.user_id = ? ORDER BY r.upload_date DESC LIMIT 5''',
+        (session['user_id'],)
+    ).fetchall()
     conn.close()
-    return render_template('dashboard.html', total_reports=total, 
-                         analyzed_reports=analyzed, recent_reports=recent)
+    return render_template(
+        'dashboard.html',
+        total_reports=total,
+        analyzed_reports=analyzed,
+        recent_reports=recent
+    )
+
 
 @app.route('/upload', methods=['GET', 'POST'])
 @login_required
@@ -419,8 +557,10 @@ def upload():
         file.save(filepath)
         file_type = filename.rsplit('.', 1)[1].lower()
         conn = get_db_connection()
-        cursor = conn.execute('INSERT INTO reports (user_id, filename, filepath, file_type) VALUES (?, ?, ?, ?)',
-                            (session['user_id'], filename, filepath, file_type))
+        cursor = conn.execute(
+            'INSERT INTO reports (user_id, filename, filepath, file_type) VALUES (?, ?, ?, ?)',
+            (session['user_id'], filename, filepath, file_type)
+        )
         report_id = cursor.lastrowid
         conn.commit()
         conn.close()
@@ -428,14 +568,18 @@ def upload():
         return redirect(url_for('analyze_report', report_id=report_id))
     return render_template('upload.html')
 
+
 @app.route('/analyze/<int:report_id>')
 @login_required
 def analyze_report(report_id):
     from utils.ocr_processor import extract_text_from_file
     from utils.ai_analyzer import analyze_medical_report
+
     conn = get_db_connection()
-    report = conn.execute('SELECT * FROM reports WHERE id = ? AND user_id = ?',
-                         (report_id, session['user_id'])).fetchone()
+    report = conn.execute(
+        'SELECT * FROM reports WHERE id = ? AND user_id = ?',
+        (report_id, session['user_id'])
+    ).fetchone()
     if not report:
         flash('Not found', 'danger')
         conn.close()
@@ -446,13 +590,21 @@ def analyze_report(report_id):
     try:
         text = extract_text_from_file(report['filepath'], report['file_type'])
         if not text or len(text.strip()) < 10:
-            text = "Unable to extract text."
+            text = 'Unable to extract text.'
         analysis = analyze_medical_report(text)
-        conn.execute('''INSERT INTO analysis_results 
-                       (report_id, extracted_text, medical_values, abnormal_findings, risk_level, suggestions)
-                       VALUES (?, ?, ?, ?, ?, ?)''',
-                    (report_id, text, analysis['medical_values'], 
-                     analysis['abnormal_findings'], analysis['risk_level'], analysis['suggestions']))
+        conn.execute(
+            '''INSERT INTO analysis_results
+            (report_id, extracted_text, medical_values, abnormal_findings, risk_level, suggestions)
+            VALUES (?, ?, ?, ?, ?, ?)''',
+            (
+                report_id,
+                text,
+                analysis['medical_values'],
+                analysis['abnormal_findings'],
+                analysis['risk_level'],
+                analysis['suggestions']
+            )
+        )
         conn.execute('UPDATE reports SET analyzed = 1 WHERE id = ?', (report_id,))
         conn.commit()
         flash('Analyzed!', 'success')
@@ -461,21 +613,25 @@ def analyze_report(report_id):
     conn.close()
     return redirect(url_for('view_analysis', report_id=report_id))
 
+
 @app.route('/analysis/<int:report_id>')
 @login_required
 def view_analysis(report_id):
     conn = get_db_connection()
-    report = conn.execute('''SELECT r.*, a.* FROM reports r 
-                            LEFT JOIN analysis_results a ON r.id = a.report_id 
-                            WHERE r.id = ? AND r.user_id = ?''',
-                         (report_id, session['user_id'])).fetchone()
+    report = conn.execute(
+        '''SELECT r.*, a.* FROM reports r
+        LEFT JOIN analysis_results a ON r.id = a.report_id
+        WHERE r.id = ? AND r.user_id = ?''',
+        (report_id, session['user_id'])
+    ).fetchone()
     conn.close()
     if not report:
         flash('Not found', 'danger')
         return redirect(url_for('dashboard'))
+
     guidance = build_patient_guidance(report)
     structured_values = parse_medical_values(report['medical_values'] or '')
-    language_support = build_local_language_support(report, guidance)
+    language_support = build_local_language_support(report, guidance, structured_values)
     interactive_report = {
         'medical_values': annotate_medical_text(report['medical_values'] or ''),
         'abnormal_findings': annotate_medical_text(report['abnormal_findings'] or ''),
@@ -490,20 +646,24 @@ def view_analysis(report_id):
         language_support=language_support
     )
 
+
 @app.route('/history')
 @login_required
 def history():
     conn = get_db_connection()
-    reports = conn.execute('''SELECT r.*, a.risk_level, a.analysis_date FROM reports r 
-                             LEFT JOIN analysis_results a ON r.id = a.report_id 
-                             WHERE r.user_id = ? ORDER BY r.upload_date DESC''',
-                          (session['user_id'],)).fetchall()
+    reports = conn.execute(
+        '''SELECT r.*, a.risk_level, a.analysis_date FROM reports r
+        LEFT JOIN analysis_results a ON r.id = a.report_id
+        WHERE r.user_id = ? ORDER BY r.upload_date DESC''',
+        (session['user_id'],)
+    ).fetchall()
     conn.close()
     return render_template('history.html', reports=reports)
+
 
 if __name__ == '__main__':
     migrate_legacy_storage()
     init_db()
-    print("AI Medical Analyzer - FREE VERSION")
-    print("http://localhost:5000")
+    print('AI Medical Analyzer - FREE VERSION')
+    print('http://localhost:5000')
     app.run(debug=True, host='0.0.0.0', port=5000)
