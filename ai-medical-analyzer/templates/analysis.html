@@ -5,40 +5,497 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body { background: #f4f7fb; }
-        .result-card { margin-bottom: 20px; border-left: 4px solid #007bff; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); }
-        .risk-HIGH { border-left-color: #dc3545; }
-        .risk-MEDIUM { border-left-color: #ffc107; }
-        .risk-LOW { border-left-color: #28a745; }
-        .guide-card { border: 0; border-radius: 18px; box-shadow: 0 16px 40px rgba(37, 99, 235, 0.10); }
-        .guide-badge { display: inline-block; padding: 6px 12px; border-radius: 999px; background: #e0ecff; color: #1d4ed8; font-size: 0.85rem; font-weight: 600; }
-        .guide-list { padding-left: 1.1rem; margin-bottom: 0; }
-        .guide-list li { margin-bottom: 10px; }
-        .panel { height: 100%; padding: 18px; border-radius: 14px; background: #f8fbff; border: 1px solid #dbeafe; }
-        .attention-chip { display: inline-block; padding: 8px 12px; margin: 0 8px 8px 0; border-radius: 999px; background: #fff4e5; color: #9a6700; font-weight: 600; }
-        .hero-note { font-size: 1.05rem; color: #475569; max-width: 760px; }
-        .simple-box { background: linear-gradient(135deg, #eff6ff, #f8fbff); border: 1px solid #bfdbfe; border-radius: 16px; padding: 18px; }
-        .term-card { height: 100%; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px; background: #ffffff; }
-        .term-card h6 { margin-bottom: 8px; font-size: 1rem; }
-        .mini-label { display: inline-block; margin-bottom: 10px; padding: 5px 10px; border-radius: 999px; background: #eef2ff; color: #3730a3; font-size: 0.8rem; font-weight: 700; }
-        .report-text { background: #f8f9fa; padding: 15px; border-radius: 8px; line-height: 1.8; color: #1e293b; }
-        .term-trigger { display: inline; padding: 0; border: 0; background: none; color: #1d4ed8; font-weight: 700; text-decoration: underline; text-decoration-style: dotted; cursor: pointer; }
-        .term-trigger:hover { color: #1e40af; }
-        .explain-box { margin-bottom: 18px; padding: 18px; border-radius: 14px; background: #fff7ed; border: 1px solid #fdba74; }
-        .explain-box[hidden] { display: none !important; }
-        .value-card { height: 100%; border: 1px solid #e2e8f0; border-radius: 16px; background: #ffffff; padding: 16px; }
-        .value-reading { font-size: 1.6rem; font-weight: 700; color: #0f172a; }
-        .status-pill { display: inline-block; padding: 6px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; }
-        .status-success { background: #dcfce7; color: #166534; }
-        .status-warning { background: #fef3c7; color: #92400e; }
-        .status-danger { background: #fee2e2; color: #b91c1c; }
-        .tool-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
-        .copy-area { background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px; padding: 14px; }
-        .lang-box { background: linear-gradient(135deg, #ecfeff, #f8fafc); border: 1px solid #a5f3fc; border-radius: 16px; padding: 18px; }
-        .translation-card { margin-top: 16px; padding: 18px; border-radius: 14px; background: #ffffff; border: 1px solid #dbeafe; }
-        .translation-block { white-space: pre-line; }
-        .translation-copy-source { display: none; }
-        .explain-inline { margin-top: 14px; padding: 14px; border-radius: 14px; background: #fffdf6; border: 1px solid #fde68a; }
+        :root {
+            --page-bg: #eef4ff;
+            --panel-bg: #ffffff;
+            --panel-soft: #f8fbff;
+            --panel-border: #dbe7ff;
+            --text-main: #122033;
+            --text-muted: #5d6b82;
+            --brand: #2563eb;
+            --brand-soft: #dbeafe;
+            --danger: #dc2626;
+            --danger-soft: #fee2e2;
+            --warning: #d97706;
+            --warning-soft: #fef3c7;
+            --success: #15803d;
+            --success-soft: #dcfce7;
+            --shadow: 0 18px 40px rgba(36, 71, 153, 0.12);
+        }
+
+        body {
+            background:
+                radial-gradient(circle at top right, rgba(37, 99, 235, 0.10), transparent 24%),
+                linear-gradient(180deg, #f7faff 0%, var(--page-bg) 100%);
+            color: var(--text-main);
+        }
+
+        .navbar {
+            box-shadow: 0 10px 24px rgba(37, 99, 235, 0.18);
+        }
+
+        .page-shell {
+            max-width: 1240px;
+            margin: 0 auto;
+            padding: 2rem 0 3rem;
+        }
+
+        .page-title {
+            font-size: 2.2rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            margin-bottom: 0.35rem;
+        }
+
+        .page-subtitle {
+            color: var(--text-muted);
+            max-width: 760px;
+            margin-bottom: 0;
+        }
+
+        .hero-card,
+        .section-card,
+        .support-card,
+        .detail-card {
+            border: 1px solid var(--panel-border);
+            border-radius: 24px;
+            background: var(--panel-bg);
+            box-shadow: var(--shadow);
+        }
+
+        .hero-card {
+            overflow: hidden;
+        }
+
+        .hero-top {
+            padding: 1.6rem;
+            background: linear-gradient(135deg, #ffffff 0%, #f5f9ff 100%);
+            border-bottom: 1px solid var(--panel-border);
+        }
+
+        .hero-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.9fr);
+            gap: 1rem;
+            align-items: start;
+        }
+
+        .hero-badge,
+        .mini-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.45rem 0.8rem;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+        }
+
+        .hero-badge {
+            color: #1d4ed8;
+            background: #e0ecff;
+        }
+
+        .mini-badge {
+            background: #eef2ff;
+            color: #3730a3;
+        }
+
+        .hero-heading {
+            margin: 0.9rem 0 0.55rem;
+            font-size: 2rem;
+            font-weight: 800;
+            line-height: 1.15;
+        }
+
+        .hero-note {
+            margin-bottom: 0;
+            color: var(--text-muted);
+            font-size: 1.02rem;
+            max-width: 720px;
+        }
+
+        .risk-panel {
+            padding: 1.1rem;
+            border-radius: 22px;
+            border: 1px solid var(--panel-border);
+            background: var(--panel-soft);
+        }
+
+        .risk-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.8rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .risk-label.high { color: var(--danger); }
+        .risk-label.medium { color: var(--warning); }
+        .risk-label.low { color: var(--success); }
+
+        .risk-title {
+            margin: 0.65rem 0 0.35rem;
+            font-size: 1.45rem;
+            font-weight: 800;
+        }
+
+        .risk-summary {
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+
+        .risk-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+
+        .quick-strip {
+            padding: 1.3rem 1.6rem 1.6rem;
+        }
+
+        .quick-stats {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 1rem;
+        }
+
+        .stat-card {
+            padding: 1rem;
+            border-radius: 20px;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+            border: 1px solid var(--panel-border);
+        }
+
+        .stat-label {
+            display: block;
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            font-weight: 700;
+            margin-bottom: 0.45rem;
+        }
+
+        .stat-value {
+            font-size: 1.75rem;
+            font-weight: 800;
+            line-height: 1;
+            margin-bottom: 0.35rem;
+        }
+
+        .stat-note {
+            color: var(--text-muted);
+            font-size: 0.88rem;
+            margin-bottom: 0;
+        }
+
+        .content-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.65fr) minmax(320px, 0.95fr);
+            gap: 1.4rem;
+            margin-top: 1.5rem;
+        }
+
+        .section-card,
+        .support-card,
+        .detail-card {
+            padding: 1.35rem;
+        }
+
+        .section-header,
+        .support-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .section-title,
+        .support-title {
+            margin: 0;
+            font-size: 1.25rem;
+            font-weight: 800;
+        }
+
+        .section-note,
+        .support-note {
+            color: var(--text-muted);
+            margin: 0.35rem 0 0;
+        }
+
+        .simple-box {
+            margin-bottom: 1rem;
+            padding: 1rem 1.1rem;
+            border-radius: 20px;
+            background: linear-gradient(135deg, #eff6ff, #f8fbff);
+            border: 1px solid #bfdbfe;
+        }
+
+        .value-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+        }
+
+        .value-card {
+            height: 100%;
+            border: 1px solid #dbe3f3;
+            border-radius: 20px;
+            background: #ffffff;
+            padding: 1rem;
+        }
+
+        .value-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .value-name {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 800;
+        }
+
+        .value-reading {
+            margin: 0.85rem 0 0.4rem;
+            font-size: 1.9rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            line-height: 1;
+        }
+
+        .value-reading small {
+            font-size: 0.88rem;
+            color: var(--text-muted);
+            font-weight: 700;
+        }
+
+        .range-line {
+            color: var(--text-muted);
+            font-size: 0.93rem;
+            margin-bottom: 0.95rem;
+        }
+
+        .explain-inline {
+            padding: 0.95rem;
+            border-radius: 16px;
+            background: #fffdf6;
+            border: 1px solid #fde68a;
+        }
+
+        .explain-inline p:last-child {
+            margin-bottom: 0;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.42rem 0.8rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .status-success {
+            background: var(--success-soft);
+            color: var(--success);
+        }
+
+        .status-warning {
+            background: var(--warning-soft);
+            color: var(--warning);
+        }
+
+        .status-danger {
+            background: var(--danger-soft);
+            color: var(--danger);
+        }
+
+        .highlight-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.65rem;
+            margin-top: 0.9rem;
+        }
+
+        .attention-chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.6rem 0.95rem;
+            border-radius: 999px;
+            background: #fff7ed;
+            color: #b45309;
+            font-weight: 700;
+            border: 1px solid #fed7aa;
+        }
+
+        .term-list {
+            display: grid;
+            gap: 0.85rem;
+            margin-top: 1rem;
+        }
+
+        .term-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 18px;
+            padding: 1rem;
+            background: #ffffff;
+        }
+
+        .term-card h6 {
+            margin-top: 0.8rem;
+            margin-bottom: 0.35rem;
+            font-size: 0.94rem;
+            font-weight: 800;
+        }
+
+        .support-stack {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .support-panel {
+            border: 1px solid var(--panel-border);
+            border-radius: 20px;
+            padding: 1rem;
+            background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+        }
+
+        .tool-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .copy-area {
+            background: #f8fafc;
+            border: 1px dashed #cbd5e1;
+            border-radius: 14px;
+            padding: 0.9rem;
+            white-space: pre-line;
+        }
+
+        .guide-list {
+            margin: 0.9rem 0 0;
+            padding-left: 1.1rem;
+        }
+
+        .guide-list li {
+            margin-bottom: 0.6rem;
+            color: #243244;
+        }
+
+        .lang-box {
+            border: 1px solid #bae6fd;
+            border-radius: 20px;
+            padding: 1rem;
+            background: linear-gradient(135deg, #ecfeff, #f8fafc);
+        }
+
+        .translation-card {
+            margin-top: 1rem;
+            padding: 1rem;
+            border-radius: 18px;
+            background: #ffffff;
+            border: 1px solid #dbeafe;
+        }
+
+        .translation-copy-source {
+            display: none;
+        }
+
+        .explain-box {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            border-radius: 18px;
+            background: #fff7ed;
+            border: 1px solid #fdba74;
+        }
+
+        .explain-box[hidden] {
+            display: none !important;
+        }
+
+        .term-trigger {
+            display: inline;
+            padding: 0;
+            border: 0;
+            background: none;
+            color: #1d4ed8;
+            font-weight: 700;
+            text-decoration: underline;
+            text-decoration-style: dotted;
+            cursor: pointer;
+        }
+
+        .term-trigger:hover {
+            color: #1e40af;
+        }
+
+        .detail-section + .detail-section {
+            margin-top: 1rem;
+        }
+
+        .detail-heading {
+            margin-bottom: 0.7rem;
+            font-size: 1.02rem;
+            font-weight: 800;
+        }
+
+        .report-text {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            padding: 1rem;
+            border-radius: 18px;
+            line-height: 1.8;
+            color: #1e293b;
+            overflow-wrap: anywhere;
+        }
+
+        .back-row {
+            margin-top: 1.4rem;
+        }
+
+        @media (max-width: 991px) {
+            .hero-grid,
+            .content-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .quick-stats {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 575px) {
+            .page-title {
+                font-size: 1.85rem;
+            }
+
+            .hero-heading {
+                font-size: 1.6rem;
+            }
+
+            .quick-stats {
+                grid-template-columns: 1fr;
+            }
+
+            .value-grid {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
@@ -48,33 +505,108 @@
             <a href="{{ url_for('logout') }}" class="btn btn-light btn-sm">Logout</a>
         </div>
     </nav>
-    <div class="container mt-4">
-        <h2>Analysis Results</h2>
 
-        <div class="card guide-card mb-4">
-            <div class="card-body p-4">
-                <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+    <div class="container page-shell">
+        <div class="mb-4">
+            <h1 class="page-title">Analysis Results</h1>
+            <p class="page-subtitle">This page is arranged like a patient-friendly summary so the most important results appear first and the full medical text stays easy to scan.</p>
+        </div>
+
+        <section class="hero-card mb-4">
+            <div class="hero-top">
+                <div class="hero-grid">
                     <div>
-                        <span class="guide-badge">Patient Help</span>
-                        <h3 class="mt-3 mb-2">Understand your report in simple language</h3>
-                        <p class="hero-note mb-0">{{ guidance.summary }}</p>
+                        <span class="hero-badge"><i class="fas fa-heart-pulse"></i> Patient Help</span>
+                        <h2 class="hero-heading">Understand your report in simple language</h2>
+                        <p class="hero-note">{{ guidance.summary }}</p>
                     </div>
-                    <a href="{{ url_for('upload') }}" class="btn btn-outline-primary">
-                        <i class="fas fa-upload"></i> Upload Another Report
-                    </a>
+                    <div class="risk-panel">
+                        <span class="risk-label {{ report.risk_level|lower }}">
+                            <i class="fas fa-shield-heart"></i> Risk Level
+                        </span>
+                        <div class="risk-title">{{ report.risk_level }}</div>
+                        <p class="risk-summary">{{ guidance.simple_explanation }}</p>
+                        <div class="risk-actions">
+                            <a href="{{ url_for('upload') }}" class="btn btn-primary">
+                                <i class="fas fa-upload"></i> Upload Another Report
+                            </a>
+                            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-primary">Back to Dashboard</a>
+                        </div>
+                    </div>
                 </div>
+            </div>
 
-                <div class="simple-box mt-4">
-                    <span class="mini-label">Simple Explanation</span>
-                    <p class="mb-0">{{ guidance.simple_explanation }}</p>
+            <div class="quick-strip">
+                <div class="quick-stats">
+                    <div class="stat-card">
+                        <span class="stat-label">Important Values</span>
+                        <div class="stat-value">{{ structured_values|length }}</div>
+                        <p class="stat-note">Detected lab values summarized below</p>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-label">Medical Terms</span>
+                        <div class="stat-value">{{ guidance.known_terms|length }}</div>
+                        <p class="stat-note">Simple explanations available</p>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-label">Doctor Questions</span>
+                        <div class="stat-value">{{ guidance.doctor_questions|length }}</div>
+                        <p class="stat-note">Ready to copy in one click</p>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-label">Translation Options</span>
+                        <div class="stat-value">{{ language_support.options|length }}</div>
+                        <p class="stat-note">Share with family in local language</p>
+                    </div>
                 </div>
+            </div>
+        </section>
 
-                <div class="row g-3 mt-1">
+        <div class="content-grid">
+            <div>
+                <section class="section-card mb-4">
+                    <div class="section-header">
+                        <div>
+                            <h3 class="section-title">1. Key Results at a Glance</h3>
+                            <p class="section-note">This is the main patient view. Each card shows the value, whether it is low, normal, or high, and what it means in plain language.</p>
+                        </div>
+                    </div>
+
+                    {% if structured_values %}
+                    <div class="value-grid">
+                        {% for item in structured_values %}
+                        <article class="value-card">
+                            <div class="value-top">
+                                <h4 class="value-name">{{ item.test }}</h4>
+                                <span class="status-pill status-{{ item.status_class }}">{{ item.status }}</span>
+                            </div>
+                            <div class="value-reading">{{ item.value }} <small>{{ item.unit }}</small></div>
+                            <div class="range-line">Normal range: {{ item.range }}</div>
+                            <div class="explain-inline">
+                                <span class="mini-badge">Simple Meaning</span>
+                                <p class="mt-2 mb-2">{{ item.meaning }}</p>
+                                <p class="text-muted mb-0">{{ item.why_it_matters }}</p>
+                            </div>
+                        </article>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="report-text">No clear structured values were detected in this report, but the full findings and suggestions are still available below.</div>
+                    {% endif %}
+                </section>
+
+                <section class="section-card mb-4">
+                    <div class="section-header">
+                        <div>
+                            <h3 class="section-title">2. Important Terms From This Report</h3>
+                            <p class="section-note">This section explains difficult medical words so patients and family members can understand the report more comfortably.</p>
+                        </div>
+                    </div>
+
                     {% if guidance.attention_items %}
-                    <div class="col-md-6">
-                        <div class="panel">
-                            <h5><i class="fas fa-circle-exclamation text-primary"></i> Important Words From This Report</h5>
-                            <p class="text-muted">These are the medical items the app noticed in your result.</p>
+                    <div class="support-panel mb-3">
+                        <span class="mini-badge">Words Mentioned</span>
+                        <div class="highlight-list">
                             {% for item in guidance.attention_items %}
                             <span class="attention-chip">{{ item }}</span>
                             {% endfor %}
@@ -83,152 +615,141 @@
                     {% endif %}
 
                     {% if guidance.known_terms %}
-                    <div class="col-md-6">
-                        <div class="panel">
-                            <h5><i class="fas fa-book-medical text-primary"></i> Word Meaning Help</h5>
-                            <p class="text-muted mb-0">Tap any highlighted medical word below to see what it means in simple language.</p>
-                        </div>
-                    </div>
-
-                    {% for term in guidance.known_terms %}
-                    <div class="col-md-6">
-                        <div class="term-card">
-                            <span class="mini-label">{{ term.term }}</span>
+                    <div class="term-list">
+                        {% for term in guidance.known_terms %}
+                        <article class="term-card">
+                            <span class="mini-badge">{{ term.term }}</span>
                             <h6>What it means</h6>
-                            <p>{{ term.meaning }}</p>
+                            <p class="mb-0">{{ term.meaning }}</p>
                             <h6>Why it matters</h6>
-                            <p class="mb-0">{{ term.why_it_matters }}</p>
+                            <p class="mb-0 text-muted">{{ term.why_it_matters }}</p>
+                        </article>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="report-text">No familiar terms were detected for the word-help area in this report.</div>
+                    {% endif %}
+                </section>
+
+                <section class="detail-card">
+                    <div class="section-header">
+                        <div>
+                            <h3 class="section-title">3. Full Medical Details</h3>
+                            <p class="section-note">The complete medical text is placed here so it stays available without crowding the patient summary above.</p>
                         </div>
                     </div>
-                    {% endfor %}
-                    {% endif %}
 
-                    <div class="col-md-6">
-                        <div class="panel">
-                            <h5><i class="fas fa-user-doctor text-primary"></i> Questions to Ask My Doctor</h5>
-                            <div class="tool-row mb-3">
-                                <p class="text-muted mb-0">One click copy for your clinic visit or WhatsApp.</p>
-                                <button type="button" class="btn btn-sm btn-outline-primary" id="copy-questions-btn">
-                                    <i class="fas fa-copy"></i> Copy Questions
-                                </button>
-                            </div>
-                            <div class="copy-area mb-3" id="doctor-questions-copy-text">
-                                {% for item in guidance.doctor_questions %}
-                                <div>{{ loop.index }}. {{ item }}</div>
+                    <div id="term-explainer" class="explain-box" hidden>
+                        <span class="mini-badge">Word Meaning</span>
+                        <h5 id="term-title" class="mt-3 mb-2"></h5>
+                        <p id="term-meaning" class="mb-2"></p>
+                        <p id="term-why" class="mb-0 text-muted"></p>
+                    </div>
+
+                    <div class="detail-section">
+                        <h4 class="detail-heading">Medical Values</h4>
+                        <div class="report-text">{{ interactive_report.medical_values }}</div>
+                    </div>
+
+                    <div class="detail-section">
+                        <h4 class="detail-heading">Findings</h4>
+                        <div class="report-text">{{ interactive_report.abnormal_findings }}</div>
+                    </div>
+
+                    <div class="detail-section">
+                        <h4 class="detail-heading">Suggestions</h4>
+                        <div class="report-text">{{ interactive_report.suggestions }}</div>
+                    </div>
+                </section>
+            </div>
+
+            <aside class="support-stack">
+                <section class="support-card">
+                    <div class="support-header">
+                        <div>
+                            <h3 class="support-title">Questions to Ask My Doctor</h3>
+                            <p class="support-note">Use this during the appointment or send it on WhatsApp before the visit.</p>
+                        </div>
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="copy-questions-btn">
+                            <i class="fas fa-copy"></i> Copy Questions
+                        </button>
+                    </div>
+
+                    <div class="copy-area" id="doctor-questions-copy-text">
+                        {% for item in guidance.doctor_questions %}
+                        <div>{{ loop.index }}. {{ item }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <ul class="guide-list">
+                        {% for item in guidance.doctor_questions %}
+                        <li>{{ item }}</li>
+                        {% endfor %}
+                    </ul>
+                </section>
+
+                <section class="support-card">
+                    <div class="support-header">
+                        <div>
+                            <h3 class="support-title">{{ language_support.title }}</h3>
+                            <p class="support-note">Pick a language and copy a ready-made summary for the patient or family.</p>
+                        </div>
+                    </div>
+
+                    <div class="lang-box">
+                        <div class="tool-row">
+                            <select id="translation-select" class="form-select">
+                                {% for option in language_support.options %}
+                                <option value="{{ option['code'] }}">{{ option['label'] }}</option>
                                 {% endfor %}
-                            </div>
-                            <ul class="guide-list">
-                                {% for item in guidance.doctor_questions %}
+                            </select>
+                            <button type="button" class="btn btn-outline-info btn-sm" id="copy-translation-btn">Copy Translation</button>
+                        </div>
+
+                        {% for option in language_support.options %}
+                        <div class="translation-card translation-option" data-lang="{{ option['code'] }}" {% if not loop.first %}hidden{% endif %}>
+                            <span class="mini-badge">{{ option['label'] }}</span>
+                            <h4 class="mt-3 mb-2">{{ option['title'] }}</h4>
+                            <p class="text-muted mb-3">{{ option['summary'] }}</p>
+
+                            {% if option['values'] %}
+                            <h5 class="detail-heading">{{ option['values_title'] }}</h5>
+                            <ul class="guide-list mt-0">
+                                {% for value in option['values'] %}
+                                <li>{{ value }}</li>
+                                {% endfor %}
+                            </ul>
+                            {% endif %}
+
+                            <h5 class="detail-heading mt-3">{{ option['questions_title'] }}</h5>
+                            <ul class="guide-list mt-0">
+                                {% for item in option['questions'] %}
                                 <li>{{ item }}</li>
                                 {% endfor %}
                             </ul>
-                        </div>
-                    </div>
 
-                    <div class="col-md-6">
-                        <div class="lang-box">
-                            <div class="tool-row">
-                                <div>
-                                    <h5><i class="fas fa-language text-primary"></i> {{ language_support.title }}</h5>
-                                    <p class="mb-0 text-muted">Choose a local language to share a simpler summary with patients and family members.</p>
-                                </div>
-                                <div class="d-flex gap-2">
-                                    <select id="translation-select" class="form-select form-select-sm">
-                                        {% for option in language_support.options %}
-                                        <option value="{{ option.code }}">{{ option.label }}</option>
-                                        {% endfor %}
-                                    </select>
-                                    <button type="button" class="btn btn-sm btn-outline-info" id="copy-translation-btn">Copy Translation</button>
-                                </div>
-                            </div>
-
-                            {% for option in language_support.options %}
-                            <div class="translation-card translation-option" data-lang="{{ option.code }}" {% if not loop.first %}hidden{% endif %}>
-                                <span class="mini-label">{{ option.label }}</span>
-                                <h6>{{ option.title }}</h6>
-                                <p class="mb-3">{{ option.summary }}</p>
-
-                                {% if option.values %}
-                                <h6>{{ option.values_title }}</h6>
-                                <ul class="guide-list mb-3">
-                                    {% for value in option.values %}
-                                    <li>{{ value }}</li>
-                                    {% endfor %}
-                                </ul>
-                                {% endif %}
-
-                                <h6>{{ option.questions_title }}</h6>
-                                <ul class="guide-list translation-block">
-                                    {% for item in option.questions %}
-                                    <li>{{ item }}</li>
-                                    {% endfor %}
-                                </ul>
-                                <div class="copy-area mt-3 translation-copy-source">
-{{ option.title }}
-{{ option.summary }}
-{% if option.values %}{{ option.values_title }}
-{% for value in option.values %}{{ loop.index }}. {{ value }}
+                            <div class="translation-copy-source">
+{{ option['title'] }}
+{{ option['summary'] }}
+{% if option['values'] %}{{ option['values_title'] }}
+{% for value in option['values'] %}{{ loop.index }}. {{ value }}
 {% endfor %}{% endif %}
-{{ option.questions_title }}
-{% for item in option.questions %}{{ loop.index }}. {{ item }}
+{{ option['questions_title'] }}
+{% for item in option['questions'] %}{{ loop.index }}. {{ item }}
 {% endfor %}
-                                </div>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="card result-card risk-{{ report.risk_level }}">
-            <div class="card-header bg-{{ 'danger' if report.risk_level == 'HIGH' else 'warning' if report.risk_level == 'MEDIUM' else 'success' }} text-white">
-                <h4><i class="fas fa-chart-line"></i> Risk Level: {{ report.risk_level }}</h4>
-            </div>
-            <div class="card-body">
-                <div id="term-explainer" class="explain-box" hidden>
-                    <span class="mini-label">Word Meaning</span>
-                    <h5 id="term-title" class="mt-2 mb-2"></h5>
-                    <p id="term-meaning" class="mb-2"></p>
-                    <p id="term-why" class="mb-0 text-muted"></p>
-                </div>
-
-                {% if structured_values %}
-                <h5 class="mb-3">Quick Value Summary</h5>
-                <p class="text-muted">Each result now shows a simple meaning beside the value, plus a color label for low, normal, or high.</p>
-                <div class="row g-3 mb-4">
-                    {% for item in structured_values %}
-                    <div class="col-md-6 col-lg-4">
-                        <div class="value-card">
-                            <div class="tool-row">
-                                <h6 class="mb-0">{{ item.test }}</h6>
-                                <span class="status-pill status-{{ item.status_class }}">{{ item.status }}</span>
-                            </div>
-                            <div class="value-reading mt-3">{{ item.value }} <small class="text-muted">{{ item.unit }}</small></div>
-                            <p class="text-muted mb-0 mt-2">Normal range: {{ item.range }}</p>
-                            <div class="explain-inline">
-                                <span class="mini-label">Simple Meaning</span>
-                                <p class="mb-2">{{ item.meaning }}</p>
-                                <p class="mb-0 text-muted">{{ item.why_it_matters }}</p>
                             </div>
                         </div>
+                        {% endfor %}
                     </div>
-                    {% endfor %}
-                </div>
-                {% endif %}
-
-                <h5>Medical Values</h5>
-                <div class="report-text">{{ interactive_report.medical_values }}</div>
-
-                <h5 class="mt-4">Findings</h5>
-                <div class="report-text">{{ interactive_report.abnormal_findings }}</div>
-
-                <h5 class="mt-4">Suggestions</h5>
-                <div class="report-text">{{ interactive_report.suggestions }}</div>
-            </div>
+                </section>
+            </aside>
         </div>
-        <a href="{{ url_for('dashboard') }}" class="btn btn-primary">Back to Dashboard</a>
+
+        <div class="back-row">
+            <a href="{{ url_for('dashboard') }}" class="btn btn-primary">Back to Dashboard</a>
+        </div>
     </div>
+
     <script>
         document.querySelectorAll('.term-trigger').forEach(function(button) {
             button.addEventListener('click', function() {
