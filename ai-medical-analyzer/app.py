@@ -1,21 +1,56 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash
+from markupsafe import Markup, escape
 from werkzeug.utils import secure_filename
-import os, sqlite3, hashlib
+import os, sqlite3, hashlib, re, shutil
 from datetime import datetime
 from functools import wraps
 
 app = Flask(__name__)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_DIR = os.path.join(BASE_DIR, 'static', 'uploads')
+DATABASE = os.path.join(BASE_DIR, 'database.db')
+
 app.config['SECRET_KEY'] = 'change-this-secret-key-in-production'
-app.config['UPLOAD_FOLDER'] = 'static/uploads'
+app.config['UPLOAD_FOLDER'] = UPLOAD_DIR
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 app.config['ALLOWED_EXTENSIONS'] = {'pdf', 'png', 'jpg', 'jpeg'}
-DATABASE = 'database.db'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 def get_db_connection():
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
     return conn
+
+def normalize_report_filepaths(conn):
+    reports = conn.execute('SELECT id, filename, filepath FROM reports').fetchall()
+    for report in reports:
+        normalized_path = os.path.join(app.config['UPLOAD_FOLDER'], report['filename'])
+        if report['filepath'] != normalized_path:
+            conn.execute('UPDATE reports SET filepath = ? WHERE id = ?',
+                        (normalized_path, report['id']))
+
+def migrate_legacy_storage():
+    project_root = os.path.dirname(BASE_DIR)
+    legacy_database = os.path.join(project_root, 'database.db')
+    legacy_upload_dir = os.path.join(project_root, 'static', 'uploads')
+    backup_dir = os.path.join(BASE_DIR, 'database', 'backups')
+
+    os.makedirs(backup_dir, exist_ok=True)
+
+    if os.path.exists(legacy_database):
+        if os.path.exists(DATABASE):
+            backup_db = os.path.join(backup_dir, 'database_before_legacy_migration.db')
+            if not os.path.exists(backup_db):
+                shutil.copy2(DATABASE, backup_db)
+        shutil.copy2(legacy_database, DATABASE)
+
+    if os.path.isdir(legacy_upload_dir):
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        for filename in os.listdir(legacy_upload_dir):
+            source_path = os.path.join(legacy_upload_dir, filename)
+            target_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            if os.path.isfile(source_path) and not os.path.exists(target_path):
+                shutil.copy2(source_path, target_path)
 
 def init_db():
     conn = get_db_connection()
@@ -34,6 +69,7 @@ def init_db():
         risk_level TEXT, suggestions TEXT,
         analysis_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (report_id) REFERENCES reports (id))''')
+    normalize_report_filepaths(conn)
     conn.commit()
     conn.close()
 
@@ -52,32 +88,280 @@ def login_required(f):
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
+def is_valid_email(email):
+    return bool(re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email))
+
+def is_valid_indian_mobile(mobile):
+    return bool(re.fullmatch(r'[6-9]\d{9}', mobile))
+
+def extract_attention_items(abnormal_findings):
+    if not abnormal_findings:
+        return []
+
+    match = re.search(r'Attention:\s*(.+)', abnormal_findings, re.IGNORECASE)
+    if not match:
+        return []
+
+    items = []
+    for item in match.group(1).split(','):
+        cleaned = item.strip().strip('.')
+        if cleaned:
+            items.append(cleaned)
+    return items
+
+def get_medical_term_library():
+    return [
+        {
+            'aliases': ['glucose', 'sugar'],
+            'term': 'Glucose',
+            'meaning': 'Glucose means blood sugar. It shows how much sugar is present in your blood.',
+            'why_it_matters': 'High glucose can be linked with diabetes risk. Low glucose can cause weakness, sweating, or dizziness.'
+        },
+        {
+            'aliases': ['hba1c'],
+            'term': 'HbA1c',
+            'meaning': 'HbA1c shows your average blood sugar over the last 2 to 3 months.',
+            'why_it_matters': 'Doctors use it to understand long-term sugar control.'
+        },
+        {
+            'aliases': ['cholesterol'],
+            'term': 'Cholesterol',
+            'meaning': 'Cholesterol is a type of fat in the blood.',
+            'why_it_matters': 'High cholesterol may increase heart disease and stroke risk over time.'
+        },
+        {
+            'aliases': ['ldl'],
+            'term': 'LDL',
+            'meaning': 'LDL is often called bad cholesterol.',
+            'why_it_matters': 'Higher LDL can build up in blood vessels and affect heart health.'
+        },
+        {
+            'aliases': ['hdl'],
+            'term': 'HDL',
+            'meaning': 'HDL is often called good cholesterol.',
+            'why_it_matters': 'It helps remove extra cholesterol from the blood.'
+        },
+        {
+            'aliases': ['triglyceride', 'triglycerides'],
+            'term': 'Triglycerides',
+            'meaning': 'Triglycerides are another type of fat in the blood.',
+            'why_it_matters': 'High levels may be linked with heart risk, diabetes, or lifestyle factors.'
+        },
+        {
+            'aliases': ['hemoglobin', 'hb'],
+            'term': 'Hemoglobin',
+            'meaning': 'Hemoglobin is the part of red blood cells that carries oxygen.',
+            'why_it_matters': 'Low hemoglobin can be related to anemia and may cause tiredness or weakness.'
+        },
+        {
+            'aliases': ['wbc'],
+            'term': 'WBC',
+            'meaning': 'WBC means white blood cell count.',
+            'why_it_matters': 'It can change during infections, inflammation, or some blood-related conditions.'
+        },
+        {
+            'aliases': ['creatinine'],
+            'term': 'Creatinine',
+            'meaning': 'Creatinine is a blood test that gives clues about kidney function.',
+            'why_it_matters': 'Higher levels can suggest the kidneys need closer review.'
+        },
+        {
+            'aliases': ['sgpt', 'alt'],
+            'term': 'SGPT / ALT',
+            'meaning': 'SGPT or ALT is a liver-related blood test.',
+            'why_it_matters': 'High values can happen when the liver is under stress or inflamed.'
+        },
+    ]
+
+def extract_report_terms(report):
+    text = ' '.join([
+        report['medical_values'] or '',
+        report['abnormal_findings'] or '',
+        report['suggestions'] or ''
+    ]).lower()
+
+    found_terms = []
+    for item in get_medical_term_library():
+        if any(token in text for token in item['aliases']):
+            found_terms.append({
+                'term': item['term'],
+                'meaning': item['meaning'],
+                'why_it_matters': item['why_it_matters']
+            })
+    return found_terms[:5]
+
+def annotate_medical_text(text):
+    if not text:
+        return Markup('')
+
+    term_index = {}
+    for item in get_medical_term_library():
+        for alias in item['aliases']:
+            term_index[alias.lower()] = item
+
+    aliases = sorted(term_index.keys(), key=len, reverse=True)
+    pattern = r'\b(' + '|'.join(re.escape(alias) for alias in aliases) + r')\b'
+
+    parts = []
+    last_end = 0
+    for match in re.finditer(pattern, text, re.IGNORECASE):
+        start, end = match.span()
+        parts.append(escape(text[last_end:start]))
+        term_data = term_index[match.group(0).lower()]
+        parts.append(Markup(
+            f'<button type="button" class="term-trigger" '
+            f'data-term="{escape(term_data["term"])}" '
+            f'data-meaning="{escape(term_data["meaning"])}" '
+            f'data-why="{escape(term_data["why_it_matters"])}">{escape(text[start:end])}</button>'
+        ))
+        last_end = end
+
+    parts.append(escape(text[last_end:]))
+    html = ''.join(str(part) for part in parts).replace('\n', '<br>')
+    return Markup(html)
+
+def parse_medical_values(text):
+    if not text:
+        return []
+    values = []
+    blocks = [block.strip() for block in text.split('\n\n') if 'Status:' in block and ':' in block]
+
+    for block in blocks:
+        lines = [line.strip() for line in block.splitlines() if line.strip()]
+        if len(lines) < 3:
+            continue
+
+        first_line = re.sub(r'^[^\w]+', '', lines[0])
+        value_match = re.match(r'(?P<test>[^:]+):\s*(?P<value>[\d.]+)\s*(?P<unit>.+)', first_line)
+        range_match = re.match(r'Normal:\s*(?P<range>.+)', lines[1])
+        status_match = re.match(r'Status:\s*(?P<status>[A-Z]+)', lines[2])
+
+        if not value_match or not range_match or not status_match:
+            continue
+
+        status = status_match.group('status').upper()
+        values.append({
+            'test': value_match.group('test').strip(),
+            'value': value_match.group('value').strip(),
+            'unit': value_match.group('unit').strip(),
+            'range': range_match.group('range').strip(),
+            'status': status,
+            'status_class': {
+                'HIGH': 'danger',
+                'LOW': 'warning',
+                'NORMAL': 'success'
+            }.get(status, 'secondary')
+        })
+    return values
+
+def build_local_language_support(report, guidance):
+    risk_level = (report['risk_level'] or 'LOW').upper()
+    hindi_summary = {
+        'HIGH': 'रिपोर्ट में कुछ मान सामान्य सीमा से बाहर हो सकते हैं। कृपया डॉक्टर को जल्द दिखाएं।',
+        'MEDIUM': 'रिपोर्ट में कुछ मानों को डॉक्टर से समझना जरूरी हो सकता है। घबराने की जरूरत नहीं, लेकिन फॉलो-अप करें।',
+        'LOW': 'रिपोर्ट में अभी कोई बड़ा जोखिम संकेत नहीं दिख रहा, लेकिन मेडिकल शब्द समझना फिर भी जरूरी है।'
+    }
+
+    hindi_questions = [
+        'इस रिपोर्ट में सबसे महत्वपूर्ण वैल्यू कौन-सी है?',
+        'क्या मुझे यह टेस्ट दोबारा कराना चाहिए?',
+        'मुझे किन लक्षणों पर तुरंत डॉक्टर से संपर्क करना चाहिए?'
+    ]
+
+    if guidance['attention_items']:
+        hindi_questions.insert(0, f"कृपया मुझे {', '.join(guidance['attention_items'][:3])} का मतलब आसान भाषा में समझाइए।")
+
+    return {
+        'title': 'परिवार के लिए आसान हिंदी मदद',
+        'summary': hindi_summary.get(risk_level, hindi_summary['LOW']),
+        'questions': hindi_questions
+    }
+
+def build_patient_guidance(report):
+    risk_level = (report['risk_level'] or 'LOW').upper()
+    attention_items = extract_attention_items(report['abnormal_findings'] or '')
+    detected_items = [item for item in attention_items[:3]]
+    known_terms = extract_report_terms(report)
+
+    summary_map = {
+        'HIGH': 'This report may have some important abnormal values. Please show it to a doctor soon so they can explain what needs attention first.',
+        'MEDIUM': 'This report shows a few values that may need a doctor review. It does not always mean something serious, but it should be understood properly.',
+        'LOW': 'This report does not show a major risk flag right now, but some medical words can still be confusing. Use the explanation section below to understand the result better.',
+    }
+
+    simple_explanation_map = {
+        'HIGH': 'Simple meaning: one or more values look more concerning than usual. The safest next step is a doctor review instead of guessing from the report alone.',
+        'MEDIUM': 'Simple meaning: some values may be outside the usual range. This often needs medical explanation, repeat testing, or comparison with symptoms.',
+        'LOW': 'Simple meaning: no strong danger signal was found by the app, but this is still not the same as a doctor giving final confirmation.'
+    }
+
+    patient_features = [
+        'Explain every medical term in simple language beside the result.',
+        'Show whether each value is low, normal, or high with color labels.',
+        'Add a one-click "Questions to ask my doctor" list for this report.',
+        'Offer a local-language translation option for patients and family members.'
+    ]
+
+    doctor_questions = [
+        'Which value in this report is most important for me?',
+        'Do I need repeat tests, treatment, or a specialist doctor?',
+        'Which symptoms should I watch for after this report?'
+    ]
+
+    if detected_items:
+        doctor_questions.insert(0, f'Please explain the meaning of {", ".join(detected_items)} in simple words.')
+
+    return {
+        'summary': summary_map.get(risk_level, summary_map['LOW']),
+        'simple_explanation': simple_explanation_map.get(risk_level, simple_explanation_map['LOW']),
+        'attention_items': attention_items,
+        'known_terms': known_terms,
+        'doctor_questions': doctor_questions,
+        'patient_features': patient_features
+    }
+
 @app.route('/')
 def index():
     return render_template('index.html')
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    form_data = {'name': '', 'email': '', 'mobile': ''}
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
         email = request.form.get('email', '').strip().lower()
         mobile = request.form.get('mobile', '').strip()
         password = request.form.get('password', '')
-        if not all([name, email, password]):
+        confirm_password = request.form.get('confirm_password', '')
+        form_data = {'name': name, 'email': email, 'mobile': mobile}
+
+        if not all([name, email, mobile, password, confirm_password]):
             flash('All fields required', 'danger')
-            return redirect(url_for('register'))
+            return render_template('register.html', form_data=form_data)
+        if not is_valid_email(email):
+            flash('Enter a valid email address', 'danger')
+            return render_template('register.html', form_data=form_data)
+        if not is_valid_indian_mobile(mobile):
+            flash('Enter a valid 10-digit Indian mobile number', 'danger')
+            return render_template('register.html', form_data=form_data)
+        if len(password) < 8:
+            flash('Password must be at least 8 characters long', 'danger')
+            return render_template('register.html', form_data=form_data)
+        if password != confirm_password:
+            flash('Passwords do not match', 'danger')
+            return render_template('register.html', form_data=form_data)
         conn = get_db_connection()
         if conn.execute('SELECT id FROM users WHERE email = ?', (email,)).fetchone():
             flash('Email already registered', 'danger')
             conn.close()
-            return redirect(url_for('register'))
+            return render_template('register.html', form_data=form_data)
         conn.execute('INSERT INTO users (name, email, mobile, password) VALUES (?, ?, ?, ?)',
                     (name, email, mobile, hash_password(password)))
         conn.commit()
         conn.close()
         flash('Registration successful!', 'success')
         return redirect(url_for('login'))
-    return render_template('register.html')
+    return render_template('register.html', form_data=form_data)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -189,7 +473,22 @@ def view_analysis(report_id):
     if not report:
         flash('Not found', 'danger')
         return redirect(url_for('dashboard'))
-    return render_template('analysis.html', report=report)
+    guidance = build_patient_guidance(report)
+    structured_values = parse_medical_values(report['medical_values'] or '')
+    language_support = build_local_language_support(report, guidance)
+    interactive_report = {
+        'medical_values': annotate_medical_text(report['medical_values'] or ''),
+        'abnormal_findings': annotate_medical_text(report['abnormal_findings'] or ''),
+        'suggestions': annotate_medical_text(report['suggestions'] or '')
+    }
+    return render_template(
+        'analysis.html',
+        report=report,
+        guidance=guidance,
+        interactive_report=interactive_report,
+        structured_values=structured_values,
+        language_support=language_support
+    )
 
 @app.route('/history')
 @login_required
@@ -203,7 +502,8 @@ def history():
     return render_template('history.html', reports=reports)
 
 if __name__ == '__main__':
+    migrate_legacy_storage()
     init_db()
-    print("🏥 AI Medical Analyzer - FREE VERSION")
+    print("AI Medical Analyzer - FREE VERSION")
     print("http://localhost:5000")
     app.run(debug=True, host='0.0.0.0', port=5000)
