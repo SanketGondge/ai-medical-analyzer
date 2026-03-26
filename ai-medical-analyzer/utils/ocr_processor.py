@@ -16,12 +16,12 @@ def extract_text_from_file(filepath, file_type):
             except:
                 pass
         
-        # Try OCR for images or if PDF failed
+       
         try:
             import pytesseract
             from PIL import Image
             if file_type == 'pdf':
-                # Convert PDF to images first
+               
                 try:
                     import pdf2image
                     images = pdf2image.convert_from_path(filepath)

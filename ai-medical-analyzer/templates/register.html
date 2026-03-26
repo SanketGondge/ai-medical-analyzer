@@ -1,17 +1,31 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Register</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - AI Medical Analyzer</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body {background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 50px 0;}
-        .register-card {background: white; border-radius: 15px; padding: 40px; box-shadow: 0 10px 40px rgba(0,0,0,0.2);}
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            padding: 32px 0;
+        }
+
+        .register-card {
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="row justify-content-center">
-            <div class="col-md-6">
+            <div class="col-md-6 col-lg-5">
                 <div class="register-card">
                     <h2 class="text-center mb-4">Create Account</h2>
                     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -21,22 +35,73 @@
                             {% endfor %}
                         {% endif %}
                     {% endwith %}
-                    <form method="POST">
+                    <form method="POST" id="register-form">
                         <div class="mb-3">
-                            <label>Full Name</label>
-                            <input type="text" name="name" class="form-control" required>
+                            <label for="name" class="form-label">Full Name</label>
+                            <input
+                                type="text"
+                                name="name"
+                                id="name"
+                                class="form-control"
+                                value="{{ form_data.name if form_data else '' }}"
+                                maxlength="100"
+                                autocomplete="name"
+                                required
+                            >
                         </div>
                         <div class="mb-3">
-                            <label>Email</label>
-                            <input type="email" name="email" class="form-control" required>
+                            <label for="email" class="form-label">Email</label>
+                            <input
+                                type="email"
+                                name="email"
+                                id="email"
+                                class="form-control"
+                                value="{{ form_data.email if form_data else '' }}"
+                                maxlength="120"
+                                autocomplete="email"
+                                required
+                            >
                         </div>
                         <div class="mb-3">
-                            <label>Mobile Number</label>
-                            <input type="tel" name="mobile" class="form-control">
+                            <label for="mobile" class="form-label">Mobile Number</label>
+                            <input
+                                type="tel"
+                                name="mobile"
+                                id="mobile"
+                                class="form-control"
+                                value="{{ form_data.mobile if form_data else '' }}"
+                                placeholder="10-digit mobile number"
+                                inputmode="numeric"
+                                maxlength="10"
+                                pattern="[6-9][0-9]{9}"
+                                title="Enter a valid 10-digit Indian mobile number"
+                                autocomplete="tel"
+                                required
+                            >
                         </div>
                         <div class="mb-3">
-                            <label>Password</label>
-                            <input type="password" name="password" class="form-control" required>
+                            <label for="password" class="form-label">Password</label>
+                            <input
+                                type="password"
+                                name="password"
+                                id="password"
+                                class="form-control"
+                                minlength="8"
+                                autocomplete="new-password"
+                                required
+                            >
+                        </div>
+                        <div class="mb-3">
+                            <label for="confirm_password" class="form-label">Confirm Password</label>
+                            <input
+                                type="password"
+                                name="confirm_password"
+                                id="confirm_password"
+                                class="form-control"
+                                minlength="8"
+                                autocomplete="new-password"
+                                required
+                            >
                         </div>
                         <button type="submit" class="btn btn-primary w-100">Register</button>
                     </form>
@@ -47,5 +112,46 @@
             </div>
         </div>
     </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const form = document.getElementById('register-form');
+            const mobileInput = document.getElementById('mobile');
+            const passwordInput = document.getElementById('password');
+            const confirmPasswordInput = document.getElementById('confirm_password');
+            if (!mobileInput) return;
+
+            mobileInput.addEventListener('input', function () {
+                this.value = this.value.replace(/[^0-9]/g, '').slice(0, 10);
+            });
+
+            mobileInput.addEventListener('keypress', function (event) {
+                if (!/[0-9]/.test(event.key)) {
+                    event.preventDefault();
+                }
+            });
+
+            function validatePasswordMatch() {
+                if (!confirmPasswordInput) return;
+
+                if (confirmPasswordInput.value && passwordInput.value !== confirmPasswordInput.value) {
+                    confirmPasswordInput.setCustomValidity('Passwords do not match');
+                } else {
+                    confirmPasswordInput.setCustomValidity('');
+                }
+            }
+
+            if (passwordInput && confirmPasswordInput) {
+                passwordInput.addEventListener('input', validatePasswordMatch);
+                confirmPasswordInput.addEventListener('input', validatePasswordMatch);
+            }
+
+            if (form) {
+                form.addEventListener('submit', function () {
+                    validatePasswordMatch();
+                });
+            }
+        });
+    </script>
 </body>
 </html>
