@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from markupsafe import Markup, escape
 from werkzeug.utils import secure_filename
 import os, hashlib, re, shutil
+import sqlite3
 from datetime import datetime
 from functools import wraps
 from threading import Lock
@@ -19,6 +20,8 @@ TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
 app = Flask(__name__, template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
 UPLOAD_DIR = os.path.join(BASE_DIR, 'static', 'uploads')
+DATABASE_DIR = os.path.join(BASE_DIR, 'database')
+SQLITE_DB_PATH = os.path.join(DATABASE_DIR, 'database.db')
 MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017').strip()
 MONGODB_DB_NAME = os.getenv('MONGODB_DB_NAME', 'ai_medical_analyzer').strip()
 
@@ -27,9 +30,12 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_DIR
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 app.config['ALLOWED_EXTENSIONS'] = {'pdf', 'png', 'jpg', 'jpeg'}
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+os.makedirs(DATABASE_DIR, exist_ok=True)
 
 _startup_lock = Lock()
 _startup_initialized = False
+app.config['DB_BACKEND'] = 'sqlite'
+app.config['STARTUP_ERROR'] = None
 
 
 def ensure_mongodb_ready():
@@ -58,8 +64,34 @@ class MongoResult:
         self.modified_count = modified_count
 
 
+class SQLiteResult:
+    def __init__(self, cursor):
+        self.lastrowid = cursor.lastrowid
+        self.matched_count = cursor.rowcount
+        self.modified_count = cursor.rowcount
+
+
+class SQLiteConnection:
+    def __init__(self, connection):
+        self.connection = connection
+
+    def commit(self):
+        self.connection.commit()
+
+    def close(self):
+        self.connection.close()
+
+
 def now_utc():
     return datetime.utcnow()
+
+
+def is_mongo_connection(conn):
+    return isinstance(conn, MongoConnection)
+
+
+def sqlite_row_to_dict(row):
+    return dict(row) if row is not None else None
 
 
 def normalize_query(query):
@@ -126,6 +158,10 @@ def mongo_set_counter_if_higher(conn, sequence_name, value):
 
 
 def db_fetchall(conn, query, params=()):
+    if not is_mongo_connection(conn):
+        cursor = conn.connection.execute(query, params)
+        return [dict(row) for row in cursor.fetchall()]
+
     normalized = normalize_query(query)
     if normalized == 'select id, filename, filepath from reports':
         return list(conn.db.reports.find({}, {'_id': 0, 'id': 1, 'filename': 1, 'filepath': 1}))
@@ -137,6 +173,10 @@ def db_fetchall(conn, query, params=()):
 
 
 def db_fetchone(conn, query, params=()):
+    if not is_mongo_connection(conn):
+        cursor = conn.connection.execute(query, params)
+        return sqlite_row_to_dict(cursor.fetchone())
+
     normalized = normalize_query(query)
     if normalized == 'select id from users where email = ?':
         return conn.db.users.find_one({'email': params[0]}, {'_id': 0, 'id': 1})
@@ -156,6 +196,10 @@ def db_fetchone(conn, query, params=()):
 
 
 def db_execute(conn, query, params=()):
+    if not is_mongo_connection(conn):
+        cursor = conn.connection.execute(query, params)
+        return SQLiteResult(cursor)
+
     normalized = normalize_query(query)
     if normalized == 'insert into users (name, email, mobile, password) values (?, ?, ?, ?)':
         user_id = get_next_sequence(conn, 'users')
@@ -191,6 +235,12 @@ def db_execute(conn, query, params=()):
 
 
 def db_insert_and_get_id(conn, table_name, columns, values):
+    if not is_mongo_connection(conn):
+        placeholders = ', '.join('?' for _ in values)
+        query = f'INSERT INTO {table_name} ({", ".join(columns)}) VALUES ({placeholders})'
+        cursor = conn.connection.execute(query, values)
+        return cursor.lastrowid
+
     if table_name != 'reports':
         raise NotImplementedError(f'Unsupported MongoDB insert table: {table_name}')
     report_id = get_next_sequence(conn, 'reports')
@@ -205,9 +255,14 @@ def db_insert_and_get_id(conn, table_name, columns, values):
 
 
 def get_db_connection():
-    ensure_mongodb_ready()
-    client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
-    return MongoConnection(client, client[MONGODB_DB_NAME])
+    if app.config.get('DB_BACKEND') == 'mongo':
+        ensure_mongodb_ready()
+        client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
+        return MongoConnection(client, client[MONGODB_DB_NAME])
+
+    connection = sqlite3.connect(SQLITE_DB_PATH)
+    connection.row_factory = sqlite3.Row
+    return SQLiteConnection(connection)
 
 
 def normalize_report_filepaths(conn):
@@ -237,6 +292,60 @@ def migrate_legacy_storage():
 
 def init_db():
     conn = get_db_connection()
+    if is_mongo_connection(conn):
+        conn.db.users.create_index([('id', ASCENDING)], unique=True)
+        conn.db.users.create_index([('email', ASCENDING)], unique=True)
+        conn.db.reports.create_index([('id', ASCENDING)], unique=True)
+        conn.db.reports.create_index([('user_id', ASCENDING), ('upload_date', DESCENDING)])
+        conn.db.analysis_results.create_index([('id', ASCENDING)], unique=True)
+        conn.db.analysis_results.create_index([('report_id', ASCENDING)], unique=True)
+    else:
+        conn.connection.executescript(
+            '''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                mobile TEXT NOT NULL,
+                password TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                filename TEXT NOT NULL,
+                filepath TEXT NOT NULL,
+                file_type TEXT NOT NULL,
+                upload_date TEXT DEFAULT CURRENT_TIMESTAMP,
+                analyzed INTEGER DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS analysis_results (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                report_id INTEGER NOT NULL UNIQUE,
+                extracted_text TEXT,
+                medical_values TEXT,
+                abnormal_findings TEXT,
+                risk_level TEXT,
+                suggestions TEXT,
+                analysis_date TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_reports_user_date
+            ON reports(user_id, upload_date DESC);
+            '''
+        )
+    normalize_report_filepaths(conn)
+    conn.commit()
+    conn.close()
+
+
+def try_initialize_mongo():
+    ensure_mongodb_ready()
+    client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
+    client.admin.command('ping')
+    conn = MongoConnection(client, client[MONGODB_DB_NAME])
     conn.db.users.create_index([('id', ASCENDING)], unique=True)
     conn.db.users.create_index([('email', ASCENDING)], unique=True)
     conn.db.reports.create_index([('id', ASCENDING)], unique=True)
@@ -258,7 +367,15 @@ def initialize_app_once():
         if _startup_initialized:
             return
         migrate_legacy_storage()
-        init_db()
+        startup_error = None
+        try:
+            try_initialize_mongo()
+            app.config['DB_BACKEND'] = 'mongo'
+        except Exception as exc:
+            startup_error = db_error_message(exc)
+            app.config['DB_BACKEND'] = 'sqlite'
+            init_db()
+        app.config['STARTUP_ERROR'] = startup_error if app.config['DB_BACKEND'] == 'mongo' else None
         _startup_initialized = True
 
 
