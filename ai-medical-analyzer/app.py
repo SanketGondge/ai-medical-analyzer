@@ -269,6 +269,10 @@ def db_error_message(exc):
     )
 
 
+def render_auth_template(template_name, startup_error=None, **context):
+    return render_template(template_name, startup_error=startup_error, **context)
+
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
@@ -652,25 +656,25 @@ def register():
 
         if not all([name, email, mobile, password, confirm_password]):
             flash('All fields required', 'danger')
-            return render_template('register.html', form_data=form_data)
+            return render_auth_template('register.html', startup_error, form_data=form_data)
         if not is_valid_email(email):
             flash('Enter a valid email address', 'danger')
-            return render_template('register.html', form_data=form_data)
+            return render_auth_template('register.html', startup_error, form_data=form_data)
         if not is_valid_indian_mobile(mobile):
             flash('Enter a valid 10-digit Indian mobile number', 'danger')
-            return render_template('register.html', form_data=form_data)
+            return render_auth_template('register.html', startup_error, form_data=form_data)
         if len(password) < 8:
             flash('Password must be at least 8 characters long', 'danger')
-            return render_template('register.html', form_data=form_data)
+            return render_auth_template('register.html', startup_error, form_data=form_data)
         if password != confirm_password:
             flash('Passwords do not match', 'danger')
-            return render_template('register.html', form_data=form_data)
+            return render_auth_template('register.html', startup_error, form_data=form_data)
         try:
             conn = get_db_connection()
             if db_fetchone(conn, 'SELECT id FROM users WHERE email = ?', (email,)):
                 flash('Email already registered', 'danger')
                 conn.close()
-                return render_template('register.html', form_data=form_data)
+                return render_auth_template('register.html', startup_error, form_data=form_data)
             db_execute(
                 conn,
                 'INSERT INTO users (name, email, mobile, password) VALUES (?, ?, ?, ?)',
@@ -679,11 +683,12 @@ def register():
             conn.commit()
             conn.close()
         except Exception as exc:
-            flash(db_error_message(exc), 'danger')
-            return render_template('register.html', form_data=form_data, startup_error=startup_error)
+            if not startup_error:
+                flash(db_error_message(exc), 'danger')
+            return render_auth_template('register.html', startup_error, form_data=form_data)
         flash('Registration successful!', 'success')
         return redirect(url_for('login'))
-    return render_template('register.html', form_data=form_data, startup_error=startup_error)
+    return render_auth_template('register.html', startup_error, form_data=form_data)
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -697,15 +702,16 @@ def login():
             user = db_fetchone(conn, 'SELECT * FROM users WHERE email = ?', (email,))
             conn.close()
         except Exception as exc:
-            flash(db_error_message(exc), 'danger')
-            return render_template('login.html', startup_error=startup_error)
+            if not startup_error:
+                flash(db_error_message(exc), 'danger')
+            return render_auth_template('login.html', startup_error)
         if user and user['password'] == hash_password(password):
             session['user_id'] = user['id']
             session['user_name'] = user['name']
             flash(f'Welcome, {user["name"]}!', 'success')
             return redirect(url_for('dashboard'))
         flash('Invalid credentials', 'danger')
-    return render_template('login.html', startup_error=startup_error)
+    return render_auth_template('login.html', startup_error)
 
 
 @app.route('/logout')
