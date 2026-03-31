@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+
+ai-medical-analyzer/__pycache__/
+ai-medical-analyzer/static/uploads/
+ai-medical-analyzer/database/backups/legacy_db_artifacts/

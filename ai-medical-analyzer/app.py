@@ -4,6 +4,7 @@ from werkzeug.utils import secure_filename
 import os, hashlib, re, shutil
 from datetime import datetime
 from functools import wraps
+from threading import Lock
 
 try:
     from pymongo import ASCENDING, DESCENDING, MongoClient, ReturnDocument
@@ -13,8 +14,10 @@ except ImportError:
     DESCENDING = -1
     ReturnDocument = None
 
-app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
+STATIC_DIR = os.path.join(BASE_DIR, 'static')
+app = Flask(__name__, template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
 UPLOAD_DIR = os.path.join(BASE_DIR, 'static', 'uploads')
 MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017').strip()
 MONGODB_DB_NAME = os.getenv('MONGODB_DB_NAME', 'ai_medical_analyzer').strip()
@@ -24,6 +27,9 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_DIR
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 app.config['ALLOWED_EXTENSIONS'] = {'pdf', 'png', 'jpg', 'jpeg'}
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+_startup_lock = Lock()
+_startup_initialized = False
 
 
 def ensure_mongodb_ready():
@@ -200,7 +206,7 @@ def db_insert_and_get_id(conn, table_name, columns, values):
 
 def get_db_connection():
     ensure_mongodb_ready()
-    client = MongoClient(MONGODB_URI)
+    client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
     return MongoConnection(client, client[MONGODB_DB_NAME])
 
 
@@ -240,6 +246,27 @@ def init_db():
     normalize_report_filepaths(conn)
     conn.commit()
     conn.close()
+
+
+def initialize_app_once():
+    global _startup_initialized
+
+    if _startup_initialized:
+        return
+
+    with _startup_lock:
+        if _startup_initialized:
+            return
+        migrate_legacy_storage()
+        init_db()
+        _startup_initialized = True
+
+
+def db_error_message(exc):
+    return (
+        'Database connection failed. On Render, set valid '
+        'MONGODB_URI and MONGODB_DB_NAME environment variables.'
+    )
 
 
 def allowed_file(filename):
@@ -602,9 +629,19 @@ def index():
     return render_template('index.html')
 
 
+@app.before_request
+def ensure_app_ready():
+    try:
+        initialize_app_once()
+        app.config['STARTUP_ERROR'] = None
+    except Exception as exc:
+        app.config['STARTUP_ERROR'] = db_error_message(exc)
+
+
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     form_data = {'name': '', 'email': '', 'mobile': ''}
+    startup_error = app.config.get('STARTUP_ERROR')
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
         email = request.form.get('email', '').strip().lower()
@@ -628,38 +665,47 @@ def register():
         if password != confirm_password:
             flash('Passwords do not match', 'danger')
             return render_template('register.html', form_data=form_data)
-        conn = get_db_connection()
-        if db_fetchone(conn, 'SELECT id FROM users WHERE email = ?', (email,)):
-            flash('Email already registered', 'danger')
+        try:
+            conn = get_db_connection()
+            if db_fetchone(conn, 'SELECT id FROM users WHERE email = ?', (email,)):
+                flash('Email already registered', 'danger')
+                conn.close()
+                return render_template('register.html', form_data=form_data)
+            db_execute(
+                conn,
+                'INSERT INTO users (name, email, mobile, password) VALUES (?, ?, ?, ?)',
+                (name, email, mobile, hash_password(password))
+            )
+            conn.commit()
             conn.close()
-            return render_template('register.html', form_data=form_data)
-        db_execute(
-            conn,
-            'INSERT INTO users (name, email, mobile, password) VALUES (?, ?, ?, ?)',
-            (name, email, mobile, hash_password(password))
-        )
-        conn.commit()
-        conn.close()
+        except Exception as exc:
+            flash(db_error_message(exc), 'danger')
+            return render_template('register.html', form_data=form_data, startup_error=startup_error)
         flash('Registration successful!', 'success')
         return redirect(url_for('login'))
-    return render_template('register.html', form_data=form_data)
+    return render_template('register.html', form_data=form_data, startup_error=startup_error)
 
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    startup_error = app.config.get('STARTUP_ERROR')
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
-        conn = get_db_connection()
-        user = db_fetchone(conn, 'SELECT * FROM users WHERE email = ?', (email,))
-        conn.close()
+        try:
+            conn = get_db_connection()
+            user = db_fetchone(conn, 'SELECT * FROM users WHERE email = ?', (email,))
+            conn.close()
+        except Exception as exc:
+            flash(db_error_message(exc), 'danger')
+            return render_template('login.html', startup_error=startup_error)
         if user and user['password'] == hash_password(password):
             session['user_id'] = user['id']
             session['user_name'] = user['name']
             flash(f'Welcome, {user["name"]}!', 'success')
             return redirect(url_for('dashboard'))
         flash('Invalid credentials', 'danger')
-    return render_template('login.html')
+    return render_template('login.html', startup_error=startup_error)
 
 
 @app.route('/logout')
