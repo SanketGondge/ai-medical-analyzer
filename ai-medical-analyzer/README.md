@@ -33,12 +33,29 @@ brew install tesseract
 pip install -r requirements.txt
 ```
 
-### 3. Run Application
+### 3. Configure MongoDB
+Set the MongoDB connection before starting the app.
+
+**Windows PowerShell:**
+```powershell
+$env:MONGODB_URI="mongodb://localhost:27017"
+$env:MONGODB_DB_NAME="ai_medical_analyzer"
+```
+
+**Linux / Mac:**
+```bash
+export MONGODB_URI=mongodb://localhost:27017
+export MONGODB_DB_NAME=ai_medical_analyzer
+```
+
+This project is now MongoDB-only. The app no longer uses SQLite or Oracle fallback code.
+
+### 4. Run Application
 ```bash
 python app.py
 ```
 
-### 4. Open Browser
+### 5. Open Browser
 ```
 http://localhost:5000
 ```
@@ -57,7 +74,7 @@ http://localhost:5000
 
 ## Tech Stack
 - Flask (Backend)
-- SQLite (Database)
+- MongoDB (Database)
 - Tesseract OCR (Text extraction)
 - Rule-based AI (Analysis)
 - Bootstrap (Frontend)

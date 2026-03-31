@@ -4,3 +4,4 @@ Pillow>=10.0.0
 pytesseract==0.3.10
 PyPDF2==3.0.1
 gunicorn
+pymongo>=4.8.0

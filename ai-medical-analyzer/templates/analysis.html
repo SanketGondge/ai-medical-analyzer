@@ -412,6 +412,11 @@
             border: 1px solid #dbeafe;
         }
 
+        .translation-summary-list {
+            margin: 0;
+            padding-left: 1.1rem;
+        }
+
         .translation-copy-source {
             display: none;
         }
@@ -549,14 +554,14 @@
                         <p class="stat-note">Simple explanations available</p>
                     </div>
                     <div class="stat-card">
-                        <span class="stat-label">Doctor Questions</span>
-                        <div class="stat-value">{{ guidance.doctor_questions|length }}</div>
-                        <p class="stat-note">Ready to copy in one click</p>
-                    </div>
-                    <div class="stat-card">
                         <span class="stat-label">Translation Options</span>
                         <div class="stat-value">{{ language_support.options|length }}</div>
                         <p class="stat-note">Share with family in local language</p>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-label">Full Details</span>
+                        <div class="stat-value">3</div>
+                        <p class="stat-note">Medical values, findings, suggestions</p>
                     </div>
                 </div>
             </div>
@@ -574,7 +579,7 @@
 
                     {% if structured_values %}
                     <div class="value-grid">
-                        {% for item in structured_values %}
+                        {% for item in structured_values[:3] %}
                         <article class="value-card">
                             <div class="value-top">
                                 <h4 class="value-name">{{ item.test }}</h4>
@@ -616,7 +621,7 @@
 
                     {% if guidance.known_terms %}
                     <div class="term-list">
-                        {% for term in guidance.known_terms %}
+                        {% for term in guidance.known_terms[:3] %}
                         <article class="term-card">
                             <span class="mini-badge">{{ term.term }}</span>
                             <h6>What it means</h6>
@@ -642,6 +647,13 @@
                     <div id="term-explainer" class="explain-box" hidden>
                         <span class="mini-badge">Word Meaning</span>
                         <h5 id="term-title" class="mt-3 mb-2"></h5>
+                        <div class="tool-row mb-3">
+                            <select id="term-language-select" class="form-select form-select-sm" style="max-width: 220px;">
+                                {% for option in language_support.options %}
+                                <option value="{{ option['code'] }}">{{ option['label'] }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
                         <p id="term-meaning" class="mb-2"></p>
                         <p id="term-why" class="mb-0 text-muted"></p>
                     </div>
@@ -664,30 +676,6 @@
             </div>
 
             <aside class="support-stack">
-                <section class="support-card">
-                    <div class="support-header">
-                        <div>
-                            <h3 class="support-title">Questions to Ask My Doctor</h3>
-                            <p class="support-note">Use this during the appointment or send it on WhatsApp before the visit.</p>
-                        </div>
-                        <button type="button" class="btn btn-outline-primary btn-sm" id="copy-questions-btn">
-                            <i class="fas fa-copy"></i> Copy Questions
-                        </button>
-                    </div>
-
-                    <div class="copy-area" id="doctor-questions-copy-text">
-                        {% for item in guidance.doctor_questions %}
-                        <div>{{ loop.index }}. {{ item }}</div>
-                        {% endfor %}
-                    </div>
-
-                    <ul class="guide-list">
-                        {% for item in guidance.doctor_questions %}
-                        <li>{{ item }}</li>
-                        {% endfor %}
-                    </ul>
-                </section>
-
                 <section class="support-card">
                     <div class="support-header">
                         <div>
@@ -714,19 +702,12 @@
 
                             {% if option['values'] %}
                             <h5 class="detail-heading">{{ option['values_title'] }}</h5>
-                            <ul class="guide-list mt-0">
+                            <ul class="translation-summary-list mt-0">
                                 {% for value in option['values'] %}
                                 <li>{{ value }}</li>
                                 {% endfor %}
                             </ul>
                             {% endif %}
-
-                            <h5 class="detail-heading mt-3">{{ option['questions_title'] }}</h5>
-                            <ul class="guide-list mt-0">
-                                {% for item in option['questions'] %}
-                                <li>{{ item }}</li>
-                                {% endfor %}
-                            </ul>
 
                             <div class="translation-copy-source">
 {{ option['title'] }}
@@ -734,9 +715,6 @@
 {% if option['values'] %}{{ option['values_title'] }}
 {% for value in option['values'] %}{{ loop.index }}. {{ value }}
 {% endfor %}{% endif %}
-{{ option['questions_title'] }}
-{% for item in option['questions'] %}{{ loop.index }}. {{ item }}
-{% endfor %}
                             </div>
                         </div>
                         {% endfor %}
@@ -751,31 +729,149 @@
     </div>
 
     <script>
+        var termTranslations = {
+            'Glucose': {
+                hi: {
+                    meaning: 'ग्लूकोज का मतलब रक्त शर्करा है। यह बताता है कि आपके खून में शुगर कितनी है।',
+                    why: 'ज्यादा ग्लूकोज डायबिटीज के जोखिम से जुड़ा हो सकता है। कम ग्लूकोज से कमजोरी, पसीना या चक्कर आ सकते हैं।'
+                },
+                mr: {
+                    meaning: 'ग्लुकोज म्हणजे रक्तातील साखर. तुमच्या रक्तात साखर किती आहे हे ते दाखवते.',
+                    why: 'जास्त ग्लुकोज मधुमेहाच्या धोक्याशी संबंधित असू शकतो. कमी ग्लुकोजमुळे अशक्तपणा, घाम किंवा चक्कर येऊ शकते.'
+                }
+            },
+            'HbA1c': {
+                hi: {
+                    meaning: 'HbA1c पिछले 2 से 3 महीनों की औसत रक्त शर्करा दिखाता है।',
+                    why: 'डॉक्टर इससे लंबे समय की शुगर कंट्रोल स्थिति समझते हैं।'
+                },
+                mr: {
+                    meaning: 'HbA1c मागील 2 ते 3 महिन्यांतील सरासरी रक्तातील साखर दाखवते.',
+                    why: 'डॉक्टर यामुळे दीर्घकालीन साखर नियंत्रण समजून घेतात.'
+                }
+            },
+            'Cholesterol': {
+                hi: {
+                    meaning: 'कोलेस्ट्रॉल खून में मौजूद एक तरह की चर्बी है।',
+                    why: 'ज्यादा कोलेस्ट्रॉल समय के साथ हृदय रोग और स्ट्रोक का जोखिम बढ़ा सकता है।'
+                },
+                mr: {
+                    meaning: 'कोलेस्टेरॉल हे रक्तातील चरबीचे एक प्रकार आहे.',
+                    why: 'जास्त कोलेस्टेरॉलमुळे कालांतराने हृदयरोग आणि स्ट्रोकचा धोका वाढू शकतो.'
+                }
+            },
+            'LDL': {
+                hi: {
+                    meaning: 'LDL को अक्सर खराब कोलेस्ट्रॉल कहा जाता है।',
+                    why: 'ज्यादा LDL रक्त नलिकाओं में जमा होकर दिल की सेहत को प्रभावित कर सकता है।'
+                },
+                mr: {
+                    meaning: 'LDL ला अनेकदा वाईट कोलेस्टेरॉल म्हटले जाते.',
+                    why: 'जास्त LDL रक्तवाहिन्यांमध्ये साचून हृदयाच्या आरोग्यावर परिणाम करू शकतो.'
+                }
+            },
+            'HDL': {
+                hi: {
+                    meaning: 'HDL को अक्सर अच्छा कोलेस्ट्रॉल कहा जाता है।',
+                    why: 'यह खून से अतिरिक्त कोलेस्ट्रॉल हटाने में मदद करता है।'
+                },
+                mr: {
+                    meaning: 'HDL ला अनेकदा चांगले कोलेस्टेरॉल म्हटले जाते.',
+                    why: 'हे रक्तातून जास्त कोलेस्टेरॉल काढून टाकण्यास मदत करते.'
+                }
+            },
+            'Triglycerides': {
+                hi: {
+                    meaning: 'ट्राइग्लिसराइड्स खून में मौजूद चर्बी का एक और प्रकार है।',
+                    why: 'ज्यादा स्तर दिल के जोखिम, डायबिटीज या जीवनशैली के कारणों से जुड़ा हो सकता है।'
+                },
+                mr: {
+                    meaning: 'ट्रायग्लिसराइड्स हे रक्तातील चरबीचे आणखी एक प्रकार आहे.',
+                    why: 'जास्त पातळी हृदयाचा धोका, मधुमेह किंवा जीवनशैलीशी संबंधित असू शकते.'
+                }
+            },
+            'Hemoglobin': {
+                hi: {
+                    meaning: 'हीमोग्लोबिन लाल रक्त कोशिकाओं का वह हिस्सा है जो ऑक्सीजन ले जाता है।',
+                    why: 'कम हीमोग्लोबिन एनीमिया से जुड़ा हो सकता है और थकान या कमजोरी ला सकता है।'
+                },
+                mr: {
+                    meaning: 'हिमोग्लोबिन हे लाल रक्तपेशींमधील ऑक्सिजन वाहून नेणारे घटक आहे.',
+                    why: 'कमी हिमोग्लोबिन अॅनिमियाशी संबंधित असू शकते आणि थकवा किंवा अशक्तपणा देऊ शकते.'
+                }
+            },
+            'WBC': {
+                hi: {
+                    meaning: 'WBC का मतलब सफेद रक्त कोशिकाओं की संख्या है।',
+                    why: 'यह संक्रमण, सूजन या कुछ रक्त संबंधी स्थितियों में बदल सकता है।'
+                },
+                mr: {
+                    meaning: 'WBC म्हणजे पांढऱ्या रक्तपेशींची संख्या.',
+                    why: 'हे संसर्ग, सूज किंवा काही रक्ताशी संबंधित स्थितींमध्ये बदलू शकते.'
+                }
+            },
+            'Creatinine': {
+                hi: {
+                    meaning: 'क्रिएटिनिन एक रक्त जांच है जो किडनी की कार्यक्षमता के बारे में संकेत देती है।',
+                    why: 'ज्यादा स्तर यह बता सकता है कि किडनी की और जांच की जरूरत है।'
+                },
+                mr: {
+                    meaning: 'क्रिएटिनिन ही रक्त तपासणी किडनीच्या कार्याबद्दल संकेत देते.',
+                    why: 'जास्त पातळी किडनीची अधिक तपासणी गरजेची असल्याचे सूचित करू शकते.'
+                }
+            },
+            'SGPT / ALT': {
+                hi: {
+                    meaning: 'SGPT या ALT लीवर से जुड़ी रक्त जांच है।',
+                    why: 'ज्यादा स्तर तब हो सकता है जब लीवर पर दबाव हो या उसमें सूजन हो।'
+                },
+                mr: {
+                    meaning: 'SGPT किंवा ALT ही यकृताशी संबंधित रक्त तपासणी आहे.',
+                    why: 'जास्त पातळी यकृतावर ताण किंवा सूज असल्यास दिसू शकते.'
+                }
+            }
+        };
+
+        var activeTermData = null;
+        var translationSelect = document.getElementById('translation-select');
+        var termLanguageSelect = document.getElementById('term-language-select');
+
+        function getSelectedLanguage() {
+            return translationSelect ? translationSelect.value : 'en';
+        }
+
+        function renderTermExplanation() {
+            if (!activeTermData) {
+                return;
+            }
+            var languageCode = termLanguageSelect ? termLanguageSelect.value : getSelectedLanguage();
+            var translation = termTranslations[activeTermData.term] && termTranslations[activeTermData.term][languageCode];
+            document.getElementById('term-title').textContent = activeTermData.term;
+            document.getElementById('term-meaning').textContent = translation ? translation.meaning : activeTermData.meaning;
+            document.getElementById('term-why').textContent = translation ? translation.why : activeTermData.why;
+        }
+
         document.querySelectorAll('.term-trigger').forEach(function(button) {
             button.addEventListener('click', function() {
                 var box = document.getElementById('term-explainer');
-                document.getElementById('term-title').textContent = this.dataset.term;
-                document.getElementById('term-meaning').textContent = this.dataset.meaning;
-                document.getElementById('term-why').textContent = this.dataset.why;
+                activeTermData = {
+                    term: this.dataset.term,
+                    meaning: this.dataset.meaning,
+                    why: this.dataset.why
+                };
+                if (termLanguageSelect) {
+                    termLanguageSelect.value = getSelectedLanguage();
+                }
+                renderTermExplanation();
                 box.hidden = false;
                 box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             });
         });
 
-        var copyButton = document.getElementById('copy-questions-btn');
-        if (copyButton) {
-            copyButton.addEventListener('click', function() {
-                var text = document.getElementById('doctor-questions-copy-text').innerText;
-                navigator.clipboard.writeText(text).then(function() {
-                    copyButton.innerHTML = '<i class="fas fa-check"></i> Copied';
-                    setTimeout(function() {
-                        copyButton.innerHTML = '<i class="fas fa-copy"></i> Copy Questions';
-                    }, 1800);
-                });
-            });
+        if (termLanguageSelect) {
+            termLanguageSelect.addEventListener('change', renderTermExplanation);
         }
 
-        var translationSelect = document.getElementById('translation-select');
         var copyTranslationButton = document.getElementById('copy-translation-btn');
         var translationCards = document.querySelectorAll('.translation-option');
 
@@ -788,6 +884,10 @@
         if (translationSelect) {
             translationSelect.addEventListener('change', function() {
                 showTranslation(this.value);
+                if (termLanguageSelect && !document.getElementById('term-explainer').hidden) {
+                    termLanguageSelect.value = this.value;
+                    renderTermExplanation();
+                }
             });
         }
 

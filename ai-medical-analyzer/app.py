@@ -1,14 +1,23 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from markupsafe import Markup, escape
 from werkzeug.utils import secure_filename
-import os, sqlite3, hashlib, re, shutil
+import os, hashlib, re, shutil
 from datetime import datetime
 from functools import wraps
+
+try:
+    from pymongo import ASCENDING, DESCENDING, MongoClient, ReturnDocument
+except ImportError:
+    MongoClient = None
+    ASCENDING = 1
+    DESCENDING = -1
+    ReturnDocument = None
 
 app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, 'static', 'uploads')
-DATABASE = os.path.join(BASE_DIR, 'database.db')
+MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017').strip()
+MONGODB_DB_NAME = os.getenv('MONGODB_DB_NAME', 'ai_medical_analyzer').strip()
 
 app.config['SECRET_KEY'] = 'change-this-secret-key-in-production'
 app.config['UPLOAD_FOLDER'] = UPLOAD_DIR
@@ -17,18 +26,191 @@ app.config['ALLOWED_EXTENSIONS'] = {'pdf', 'png', 'jpg', 'jpeg'}
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 
+def ensure_mongodb_ready():
+    if MongoClient is None:
+        raise RuntimeError('MongoDB backend selected, but pymongo is not installed.')
+    if not MONGODB_URI or not MONGODB_DB_NAME:
+        raise RuntimeError('Set MONGODB_URI and MONGODB_DB_NAME for MongoDB connections.')
+
+
+class MongoConnection:
+    def __init__(self, client, db):
+        self.client = client
+        self.db = db
+
+    def commit(self):
+        return None
+
+    def close(self):
+        self.client.close()
+
+
+class MongoResult:
+    def __init__(self, inserted_id=None, matched_count=0, modified_count=0):
+        self.lastrowid = inserted_id
+        self.matched_count = matched_count
+        self.modified_count = modified_count
+
+
+def now_utc():
+    return datetime.utcnow()
+
+
+def normalize_query(query):
+    return ' '.join(query.split()).strip().lower()
+
+
+def get_next_sequence(conn, sequence_name):
+    counter = conn.db.counters.find_one_and_update(
+        {'_id': sequence_name},
+        {'$inc': {'value': 1}},
+        upsert=True,
+        return_document=ReturnDocument.AFTER
+    )
+    return counter['value']
+
+
+def mongo_fetch_report_with_analysis(conn, report_id, user_id):
+    report = conn.db.reports.find_one({'id': report_id, 'user_id': user_id}, {'_id': 0})
+    if not report:
+        return None
+    analysis = conn.db.analysis_results.find_one({'report_id': report_id}, {'_id': 0})
+    if analysis:
+        merged = dict(report)
+        merged.update(analysis)
+        return merged
+    return report
+
+
+def mongo_fetch_report_history(conn, user_id, limit=None):
+    reports = list(
+        conn.db.reports.find({'user_id': user_id}, {'_id': 0}).sort('upload_date', DESCENDING)
+    )
+    analysis_map = {
+        item['report_id']: item
+        for item in conn.db.analysis_results.find(
+            {'report_id': {'$in': [report['id'] for report in reports]}},
+            {'_id': 0, 'report_id': 1, 'risk_level': 1, 'analysis_date': 1}
+        )
+    } if reports else {}
+
+    rows = []
+    for report in reports:
+        row = dict(report)
+        analysis = analysis_map.get(report['id'])
+        if analysis:
+            row['risk_level'] = analysis.get('risk_level')
+            row['analysis_date'] = analysis.get('analysis_date')
+        else:
+            row['risk_level'] = None
+            row['analysis_date'] = None
+        rows.append(row)
+
+    if limit is not None:
+        return rows[:limit]
+    return rows
+
+
+def mongo_set_counter_if_higher(conn, sequence_name, value):
+    conn.db.counters.update_one(
+        {'_id': sequence_name},
+        {'$max': {'value': value}},
+        upsert=True
+    )
+
+
+def db_fetchall(conn, query, params=()):
+    normalized = normalize_query(query)
+    if normalized == 'select id, filename, filepath from reports':
+        return list(conn.db.reports.find({}, {'_id': 0, 'id': 1, 'filename': 1, 'filepath': 1}))
+    if normalized.startswith('select r.*, a.risk_level, a.analysis_date from reports r left join analysis_results a on r.id = a.report_id where r.user_id = ? order by r.upload_date desc'):
+        return mongo_fetch_report_history(conn, params[0])
+    if normalized.startswith('select r.*, a.risk_level from reports r left join analysis_results a on r.id = a.report_id where r.user_id = ? order by r.upload_date desc'):
+        return mongo_fetch_report_history(conn, params[0], limit=5)
+    raise NotImplementedError(f'Unsupported MongoDB fetchall query: {query}')
+
+
+def db_fetchone(conn, query, params=()):
+    normalized = normalize_query(query)
+    if normalized == 'select id from users where email = ?':
+        return conn.db.users.find_one({'email': params[0]}, {'_id': 0, 'id': 1})
+    if normalized == 'select * from users where email = ?':
+        return conn.db.users.find_one({'email': params[0]}, {'_id': 0})
+    if normalized == 'select count(*) as c from reports where user_id = ?':
+        return {'c': conn.db.reports.count_documents({'user_id': params[0]})}
+    if normalized == 'select count(*) as c from reports where user_id = ? and analyzed = 1':
+        return {'c': conn.db.reports.count_documents({'user_id': params[0], 'analyzed': True})}
+    if normalized == 'select * from reports where id = ? and user_id = ?':
+        return conn.db.reports.find_one({'id': params[0], 'user_id': params[1]}, {'_id': 0})
+    if normalized == 'select * from analysis_results where report_id = ?':
+        return conn.db.analysis_results.find_one({'report_id': params[0]}, {'_id': 0})
+    if normalized.startswith('select r.*, a.* from reports r left join analysis_results a on r.id = a.report_id where r.id = ? and r.user_id = ?'):
+        return mongo_fetch_report_with_analysis(conn, params[0], params[1])
+    raise NotImplementedError(f'Unsupported MongoDB fetchone query: {query}')
+
+
+def db_execute(conn, query, params=()):
+    normalized = normalize_query(query)
+    if normalized == 'insert into users (name, email, mobile, password) values (?, ?, ?, ?)':
+        user_id = get_next_sequence(conn, 'users')
+        conn.db.users.insert_one({
+            'id': user_id,
+            'name': params[0],
+            'email': params[1],
+            'mobile': params[2],
+            'password': params[3],
+            'created_at': now_utc()
+        })
+        return MongoResult(inserted_id=user_id)
+    if normalized.startswith('insert into analysis_results (report_id, extracted_text, medical_values, abnormal_findings, risk_level, suggestions) values (?, ?, ?, ?, ?, ?)'):
+        analysis_id = get_next_sequence(conn, 'analysis_results')
+        conn.db.analysis_results.insert_one({
+            'id': analysis_id,
+            'report_id': params[0],
+            'extracted_text': params[1],
+            'medical_values': params[2],
+            'abnormal_findings': params[3],
+            'risk_level': params[4],
+            'suggestions': params[5],
+            'analysis_date': now_utc()
+        })
+        return MongoResult(inserted_id=analysis_id)
+    if normalized == 'update reports set filepath = ? where id = ?':
+        result = conn.db.reports.update_one({'id': params[1]}, {'$set': {'filepath': params[0]}})
+        return MongoResult(matched_count=result.matched_count, modified_count=result.modified_count)
+    if normalized == 'update reports set analyzed = 1 where id = ?':
+        result = conn.db.reports.update_one({'id': params[0]}, {'$set': {'analyzed': True}})
+        return MongoResult(matched_count=result.matched_count, modified_count=result.modified_count)
+    raise NotImplementedError(f'Unsupported MongoDB execute query: {query}')
+
+
+def db_insert_and_get_id(conn, table_name, columns, values):
+    if table_name != 'reports':
+        raise NotImplementedError(f'Unsupported MongoDB insert table: {table_name}')
+    report_id = get_next_sequence(conn, 'reports')
+    document = {column: value for column, value in zip(columns, values)}
+    document.update({
+        'id': report_id,
+        'upload_date': now_utc(),
+        'analyzed': False
+    })
+    conn.db.reports.insert_one(document)
+    return report_id
+
+
 def get_db_connection():
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    return conn
+    ensure_mongodb_ready()
+    client = MongoClient(MONGODB_URI)
+    return MongoConnection(client, client[MONGODB_DB_NAME])
 
 
 def normalize_report_filepaths(conn):
-    reports = conn.execute('SELECT id, filename, filepath FROM reports').fetchall()
+    reports = db_fetchall(conn, 'SELECT id, filename, filepath FROM reports')
     for report in reports:
         normalized_path = os.path.join(app.config['UPLOAD_FOLDER'], report['filename'])
         if report['filepath'] != normalized_path:
-            conn.execute(
+            db_execute(
+                conn,
                 'UPDATE reports SET filepath = ? WHERE id = ?',
                 (normalized_path, report['id'])
             )
@@ -36,18 +218,7 @@ def normalize_report_filepaths(conn):
 
 def migrate_legacy_storage():
     project_root = os.path.dirname(BASE_DIR)
-    legacy_database = os.path.join(project_root, 'database.db')
     legacy_upload_dir = os.path.join(project_root, 'static', 'uploads')
-    backup_dir = os.path.join(BASE_DIR, 'database', 'backups')
-
-    os.makedirs(backup_dir, exist_ok=True)
-
-    if os.path.exists(legacy_database):
-        if os.path.exists(DATABASE):
-            backup_db = os.path.join(backup_dir, 'database_before_legacy_migration.db')
-            if not os.path.exists(backup_db):
-                shutil.copy2(DATABASE, backup_db)
-        shutil.copy2(legacy_database, DATABASE)
 
     if os.path.isdir(legacy_upload_dir):
         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -60,27 +231,12 @@ def migrate_legacy_storage():
 
 def init_db():
     conn = get_db_connection()
-    conn.execute(
-        '''CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
-        email TEXT UNIQUE NOT NULL, mobile TEXT, password TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)'''
-    )
-    conn.execute(
-        '''CREATE TABLE IF NOT EXISTS reports (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
-        filename TEXT NOT NULL, filepath TEXT NOT NULL, file_type TEXT NOT NULL,
-        upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP, analyzed BOOLEAN DEFAULT 0,
-        FOREIGN KEY (user_id) REFERENCES users (id))'''
-    )
-    conn.execute(
-        '''CREATE TABLE IF NOT EXISTS analysis_results (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, report_id INTEGER NOT NULL,
-        extracted_text TEXT, medical_values TEXT, abnormal_findings TEXT,
-        risk_level TEXT, suggestions TEXT,
-        analysis_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (report_id) REFERENCES reports (id))'''
-    )
+    conn.db.users.create_index([('id', ASCENDING)], unique=True)
+    conn.db.users.create_index([('email', ASCENDING)], unique=True)
+    conn.db.reports.create_index([('id', ASCENDING)], unique=True)
+    conn.db.reports.create_index([('user_id', ASCENDING), ('upload_date', DESCENDING)])
+    conn.db.analysis_results.create_index([('id', ASCENDING)], unique=True)
+    conn.db.analysis_results.create_index([('report_id', ASCENDING)], unique=True)
     normalize_report_filepaths(conn)
     conn.commit()
     conn.close()
@@ -473,11 +629,12 @@ def register():
             flash('Passwords do not match', 'danger')
             return render_template('register.html', form_data=form_data)
         conn = get_db_connection()
-        if conn.execute('SELECT id FROM users WHERE email = ?', (email,)).fetchone():
+        if db_fetchone(conn, 'SELECT id FROM users WHERE email = ?', (email,)):
             flash('Email already registered', 'danger')
             conn.close()
             return render_template('register.html', form_data=form_data)
-        conn.execute(
+        db_execute(
+            conn,
             'INSERT INTO users (name, email, mobile, password) VALUES (?, ?, ?, ?)',
             (name, email, mobile, hash_password(password))
         )
@@ -494,7 +651,7 @@ def login():
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
         conn = get_db_connection()
-        user = conn.execute('SELECT * FROM users WHERE email = ?', (email,)).fetchone()
+        user = db_fetchone(conn, 'SELECT * FROM users WHERE email = ?', (email,))
         conn.close()
         if user and user['password'] == hash_password(password):
             session['user_id'] = user['id']
@@ -516,20 +673,21 @@ def logout():
 @login_required
 def dashboard():
     conn = get_db_connection()
-    total = conn.execute(
+    total = db_fetchone(
+        conn,
         'SELECT COUNT(*) as c FROM reports WHERE user_id = ?',
         (session['user_id'],)
-    ).fetchone()['c']
-    analyzed = conn.execute(
+    )['c']
+    analyzed = db_fetchone(
+        conn,
         'SELECT COUNT(*) as c FROM reports WHERE user_id = ? AND analyzed = 1',
         (session['user_id'],)
-    ).fetchone()['c']
-    recent = conn.execute(
-        '''SELECT r.*, a.risk_level FROM reports r
+    )['c']
+    recent_query = '''SELECT r.*, a.risk_level FROM reports r
         LEFT JOIN analysis_results a ON r.id = a.report_id
-        WHERE r.user_id = ? ORDER BY r.upload_date DESC LIMIT 5''',
-        (session['user_id'],)
-    ).fetchall()
+        WHERE r.user_id = ? ORDER BY r.upload_date DESC'''
+    recent_query += ' LIMIT 5'
+    recent = db_fetchall(conn, recent_query, (session['user_id'],))
     conn.close()
     return render_template(
         'dashboard.html',
@@ -557,11 +715,12 @@ def upload():
         file.save(filepath)
         file_type = filename.rsplit('.', 1)[1].lower()
         conn = get_db_connection()
-        cursor = conn.execute(
-            'INSERT INTO reports (user_id, filename, filepath, file_type) VALUES (?, ?, ?, ?)',
+        report_id = db_insert_and_get_id(
+            conn,
+            'reports',
+            ('user_id', 'filename', 'filepath', 'file_type'),
             (session['user_id'], filename, filepath, file_type)
         )
-        report_id = cursor.lastrowid
         conn.commit()
         conn.close()
         flash('Uploaded!', 'success')
@@ -576,15 +735,16 @@ def analyze_report(report_id):
     from utils.ai_analyzer import analyze_medical_report
 
     conn = get_db_connection()
-    report = conn.execute(
+    report = db_fetchone(
+        conn,
         'SELECT * FROM reports WHERE id = ? AND user_id = ?',
         (report_id, session['user_id'])
-    ).fetchone()
+    )
     if not report:
         flash('Not found', 'danger')
         conn.close()
         return redirect(url_for('dashboard'))
-    if conn.execute('SELECT * FROM analysis_results WHERE report_id = ?', (report_id,)).fetchone():
+    if db_fetchone(conn, 'SELECT * FROM analysis_results WHERE report_id = ?', (report_id,)):
         conn.close()
         return redirect(url_for('view_analysis', report_id=report_id))
     try:
@@ -592,7 +752,8 @@ def analyze_report(report_id):
         if not text or len(text.strip()) < 10:
             text = 'Unable to extract text.'
         analysis = analyze_medical_report(text)
-        conn.execute(
+        db_execute(
+            conn,
             '''INSERT INTO analysis_results
             (report_id, extracted_text, medical_values, abnormal_findings, risk_level, suggestions)
             VALUES (?, ?, ?, ?, ?, ?)''',
@@ -605,7 +766,7 @@ def analyze_report(report_id):
                 analysis['suggestions']
             )
         )
-        conn.execute('UPDATE reports SET analyzed = 1 WHERE id = ?', (report_id,))
+        db_execute(conn, 'UPDATE reports SET analyzed = 1 WHERE id = ?', (report_id,))
         conn.commit()
         flash('Analyzed!', 'success')
     except Exception as e:
@@ -618,12 +779,13 @@ def analyze_report(report_id):
 @login_required
 def view_analysis(report_id):
     conn = get_db_connection()
-    report = conn.execute(
+    report = db_fetchone(
+        conn,
         '''SELECT r.*, a.* FROM reports r
         LEFT JOIN analysis_results a ON r.id = a.report_id
         WHERE r.id = ? AND r.user_id = ?''',
         (report_id, session['user_id'])
-    ).fetchone()
+    )
     conn.close()
     if not report:
         flash('Not found', 'danger')
@@ -651,12 +813,13 @@ def view_analysis(report_id):
 @login_required
 def history():
     conn = get_db_connection()
-    reports = conn.execute(
+    reports = db_fetchall(
+        conn,
         '''SELECT r.*, a.risk_level, a.analysis_date FROM reports r
         LEFT JOIN analysis_results a ON r.id = a.report_id
         WHERE r.user_id = ? ORDER BY r.upload_date DESC''',
         (session['user_id'],)
-    ).fetchall()
+    )
     conn.close()
     return render_template('history.html', reports=reports)
 
