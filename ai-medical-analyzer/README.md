@@ -1,14 +1,14 @@
 # AI Medical Report Analyzer - FREE VERSION
 
-Upload medical reports and get AI-powered analysis **WITHOUT any API costs!**
+Upload medical reports and get AI-powered analysis without any API costs.
 
 ## Features
-- User Registration/Login
-- Upload PDF/Image reports
-- FREE AI Analysis (No API keys needed)
-- Health Recommendations
-- Report History
-- Risk Assessment
+- User registration and login
+- Upload PDF and image reports
+- Free AI-style analysis with no API keys
+- Health recommendations
+- Report history
+- Risk assessment
 
 ## Installation
 
@@ -33,22 +33,20 @@ brew install tesseract
 pip install -r requirements.txt
 ```
 
-### 3. Configure MongoDB
-Set the MongoDB connection before starting the app.
+### 3. Configure SQLite
+The app now uses SQLite by default. You can keep the default database file or set a custom path.
 
 **Windows PowerShell:**
 ```powershell
-$env:MONGODB_URI="mongodb://localhost:27017"
-$env:MONGODB_DB_NAME="ai_medical_analyzer"
+$env:SQLITE_DB_PATH="database/app_database.db"
 ```
 
 **Linux / Mac:**
 ```bash
-export MONGODB_URI=mongodb://localhost:27017
-export MONGODB_DB_NAME=ai_medical_analyzer
+export SQLITE_DB_PATH=database/app_database.db
 ```
 
-This project is now MongoDB-only. The app no longer uses SQLite or Oracle fallback code.
+If `SQLITE_DB_PATH` is not set, the app automatically uses `database/app_database.db`.
 
 ### 4. Run Application
 ```bash
@@ -56,28 +54,28 @@ python app.py
 ```
 
 ### 5. Open Browser
-```
+```text
 http://localhost:5000
 ```
 
 ## Usage
-1. Register/Login
-2. Upload medical report (PDF/Image)
-3. Click "Analyze"
-4. View results instantly
+1. Register or log in
+2. Upload a medical report
+3. Click Analyze
+4. View the generated results
 
 ## Cost
-**$0.00** - Completely FREE!
+**$0.00** - Completely free
 - No API keys needed
 - No monthly fees
 - Unlimited analyses
 
 ## Tech Stack
-- Flask (Backend)
-- MongoDB (Database)
-- Tesseract OCR (Text extraction)
-- Rule-based AI (Analysis)
-- Bootstrap (Frontend)
+- Flask
+- SQLite
+- Tesseract OCR
+- Rule-based AI analysis
+- Bootstrap
 
 ## Note
-This is for educational purposes only. Always consult with qualified healthcare professionals.
+This project is for educational purposes only. Always consult a qualified healthcare professional.

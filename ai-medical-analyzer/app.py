@@ -1,29 +1,56 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask import Flask, render_template, request, redirect, url_for, session, flash, make_response
 from markupsafe import Markup, escape
 from werkzeug.utils import secure_filename
-import os, hashlib, re, shutil
-import sqlite3
+import io, os, hashlib, re, shutil, sqlite3
 from datetime import datetime
 from functools import wraps
 from threading import Lock
-
-try:
-    from pymongo import ASCENDING, DESCENDING, MongoClient, ReturnDocument
-except ImportError:
-    MongoClient = None
-    ASCENDING = 1
-    DESCENDING = -1
-    ReturnDocument = None
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus import ListFlowable, ListItem, Paragraph, SimpleDocTemplate, Spacer
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
-app = Flask(__name__, template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
 UPLOAD_DIR = os.path.join(BASE_DIR, 'static', 'uploads')
 DATABASE_DIR = os.path.join(BASE_DIR, 'database')
-SQLITE_DB_PATH = os.path.join(DATABASE_DIR, 'database.db')
-MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017').strip()
-MONGODB_DB_NAME = os.getenv('MONGODB_DB_NAME', 'ai_medical_analyzer').strip()
+DEFAULT_SQLITE_PATH = os.path.join(DATABASE_DIR, 'app_database.db')
+
+
+def load_local_env():
+    env_path = os.path.join(BASE_DIR, '.env')
+    if not os.path.exists(env_path):
+        return
+
+    with open(env_path, 'r', encoding='utf-8') as env_file:
+        for raw_line in env_file:
+            line = raw_line.strip()
+            if not line or line.startswith('#') or '=' not in line:
+                continue
+            key, value = line.split('=', 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+
+
+load_local_env()
+
+app = Flask(__name__, template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
+RAW_SQLITE_DB_PATH = os.getenv('SQLITE_DB_PATH', DEFAULT_SQLITE_PATH).strip() or DEFAULT_SQLITE_PATH
+
+
+def resolve_sqlite_path(path):
+    if os.path.isabs(path):
+        return path
+    return os.path.join(BASE_DIR, path)
+
+
+SQLITE_DB_PATH = resolve_sqlite_path(RAW_SQLITE_DB_PATH)
 
 app.config['SECRET_KEY'] = 'change-this-secret-key-in-production'
 app.config['UPLOAD_FOLDER'] = UPLOAD_DIR
@@ -38,231 +65,43 @@ app.config['DB_BACKEND'] = 'sqlite'
 app.config['STARTUP_ERROR'] = None
 
 
-def ensure_mongodb_ready():
-    if MongoClient is None:
-        raise RuntimeError('MongoDB backend selected, but pymongo is not installed.')
-    if not MONGODB_URI or not MONGODB_DB_NAME:
-        raise RuntimeError('Set MONGODB_URI and MONGODB_DB_NAME for MongoDB connections.')
-
-
-class MongoConnection:
-    def __init__(self, client, db):
-        self.client = client
-        self.db = db
-
-    def commit(self):
-        return None
-
-    def close(self):
-        self.client.close()
-
-
-class MongoResult:
-    def __init__(self, inserted_id=None, matched_count=0, modified_count=0):
-        self.lastrowid = inserted_id
-        self.matched_count = matched_count
-        self.modified_count = modified_count
-
-
-class SQLiteResult:
-    def __init__(self, cursor):
-        self.lastrowid = cursor.lastrowid
-        self.matched_count = cursor.rowcount
-        self.modified_count = cursor.rowcount
-
-
-class SQLiteConnection:
-    def __init__(self, connection):
-        self.connection = connection
-
-    def commit(self):
-        self.connection.commit()
-
-    def close(self):
-        self.connection.close()
+def ensure_sqlite_ready():
+    if not SQLITE_DB_PATH:
+        raise RuntimeError('Set SQLITE_DB_PATH for the SQLite database location.')
+    os.makedirs(os.path.dirname(SQLITE_DB_PATH), exist_ok=True)
 
 
 def now_utc():
     return datetime.utcnow()
 
 
-def is_mongo_connection(conn):
-    return isinstance(conn, MongoConnection)
-
-
-def sqlite_row_to_dict(row):
-    return dict(row) if row is not None else None
-
-
-def normalize_query(query):
-    return ' '.join(query.split()).strip().lower()
-
-
-def get_next_sequence(conn, sequence_name):
-    counter = conn.db.counters.find_one_and_update(
-        {'_id': sequence_name},
-        {'$inc': {'value': 1}},
-        upsert=True,
-        return_document=ReturnDocument.AFTER
-    )
-    return counter['value']
-
-
-def mongo_fetch_report_with_analysis(conn, report_id, user_id):
-    report = conn.db.reports.find_one({'id': report_id, 'user_id': user_id}, {'_id': 0})
-    if not report:
-        return None
-    analysis = conn.db.analysis_results.find_one({'report_id': report_id}, {'_id': 0})
-    if analysis:
-        merged = dict(report)
-        merged.update(analysis)
-        return merged
-    return report
-
-
-def mongo_fetch_report_history(conn, user_id, limit=None):
-    reports = list(
-        conn.db.reports.find({'user_id': user_id}, {'_id': 0}).sort('upload_date', DESCENDING)
-    )
-    analysis_map = {
-        item['report_id']: item
-        for item in conn.db.analysis_results.find(
-            {'report_id': {'$in': [report['id'] for report in reports]}},
-            {'_id': 0, 'report_id': 1, 'risk_level': 1, 'analysis_date': 1}
-        )
-    } if reports else {}
-
-    rows = []
-    for report in reports:
-        row = dict(report)
-        analysis = analysis_map.get(report['id'])
-        if analysis:
-            row['risk_level'] = analysis.get('risk_level')
-            row['analysis_date'] = analysis.get('analysis_date')
-        else:
-            row['risk_level'] = None
-            row['analysis_date'] = None
-        rows.append(row)
-
-    if limit is not None:
-        return rows[:limit]
-    return rows
-
-
-def mongo_set_counter_if_higher(conn, sequence_name, value):
-    conn.db.counters.update_one(
-        {'_id': sequence_name},
-        {'$max': {'value': value}},
-        upsert=True
-    )
-
-
 def db_fetchall(conn, query, params=()):
-    if not is_mongo_connection(conn):
-        cursor = conn.connection.execute(query, params)
-        return [dict(row) for row in cursor.fetchall()]
-
-    normalized = normalize_query(query)
-    if normalized == 'select id, filename, filepath from reports':
-        return list(conn.db.reports.find({}, {'_id': 0, 'id': 1, 'filename': 1, 'filepath': 1}))
-    if normalized.startswith('select r.*, a.risk_level, a.analysis_date from reports r left join analysis_results a on r.id = a.report_id where r.user_id = ? order by r.upload_date desc'):
-        return mongo_fetch_report_history(conn, params[0])
-    if normalized.startswith('select r.*, a.risk_level from reports r left join analysis_results a on r.id = a.report_id where r.user_id = ? order by r.upload_date desc'):
-        return mongo_fetch_report_history(conn, params[0], limit=5)
-    raise NotImplementedError(f'Unsupported MongoDB fetchall query: {query}')
+    cursor = conn.execute(query, params)
+    return [dict(row) for row in cursor.fetchall()]
 
 
 def db_fetchone(conn, query, params=()):
-    if not is_mongo_connection(conn):
-        cursor = conn.connection.execute(query, params)
-        return sqlite_row_to_dict(cursor.fetchone())
-
-    normalized = normalize_query(query)
-    if normalized == 'select id from users where email = ?':
-        return conn.db.users.find_one({'email': params[0]}, {'_id': 0, 'id': 1})
-    if normalized == 'select * from users where email = ?':
-        return conn.db.users.find_one({'email': params[0]}, {'_id': 0})
-    if normalized == 'select count(*) as c from reports where user_id = ?':
-        return {'c': conn.db.reports.count_documents({'user_id': params[0]})}
-    if normalized == 'select count(*) as c from reports where user_id = ? and analyzed = 1':
-        return {'c': conn.db.reports.count_documents({'user_id': params[0], 'analyzed': True})}
-    if normalized == 'select * from reports where id = ? and user_id = ?':
-        return conn.db.reports.find_one({'id': params[0], 'user_id': params[1]}, {'_id': 0})
-    if normalized == 'select * from analysis_results where report_id = ?':
-        return conn.db.analysis_results.find_one({'report_id': params[0]}, {'_id': 0})
-    if normalized.startswith('select r.*, a.* from reports r left join analysis_results a on r.id = a.report_id where r.id = ? and r.user_id = ?'):
-        return mongo_fetch_report_with_analysis(conn, params[0], params[1])
-    raise NotImplementedError(f'Unsupported MongoDB fetchone query: {query}')
+    cursor = conn.execute(query, params)
+    row = cursor.fetchone()
+    return dict(row) if row else None
 
 
 def db_execute(conn, query, params=()):
-    if not is_mongo_connection(conn):
-        cursor = conn.connection.execute(query, params)
-        return SQLiteResult(cursor)
-
-    normalized = normalize_query(query)
-    if normalized == 'insert into users (name, email, mobile, password) values (?, ?, ?, ?)':
-        user_id = get_next_sequence(conn, 'users')
-        conn.db.users.insert_one({
-            'id': user_id,
-            'name': params[0],
-            'email': params[1],
-            'mobile': params[2],
-            'password': params[3],
-            'created_at': now_utc()
-        })
-        return MongoResult(inserted_id=user_id)
-    if normalized.startswith('insert into analysis_results (report_id, extracted_text, medical_values, abnormal_findings, risk_level, suggestions) values (?, ?, ?, ?, ?, ?)'):
-        analysis_id = get_next_sequence(conn, 'analysis_results')
-        conn.db.analysis_results.insert_one({
-            'id': analysis_id,
-            'report_id': params[0],
-            'extracted_text': params[1],
-            'medical_values': params[2],
-            'abnormal_findings': params[3],
-            'risk_level': params[4],
-            'suggestions': params[5],
-            'analysis_date': now_utc()
-        })
-        return MongoResult(inserted_id=analysis_id)
-    if normalized == 'update reports set filepath = ? where id = ?':
-        result = conn.db.reports.update_one({'id': params[1]}, {'$set': {'filepath': params[0]}})
-        return MongoResult(matched_count=result.matched_count, modified_count=result.modified_count)
-    if normalized == 'update reports set analyzed = 1 where id = ?':
-        result = conn.db.reports.update_one({'id': params[0]}, {'$set': {'analyzed': True}})
-        return MongoResult(matched_count=result.matched_count, modified_count=result.modified_count)
-    raise NotImplementedError(f'Unsupported MongoDB execute query: {query}')
+    return conn.execute(query, params)
 
 
 def db_insert_and_get_id(conn, table_name, columns, values):
-    if not is_mongo_connection(conn):
-        placeholders = ', '.join('?' for _ in values)
-        query = f'INSERT INTO {table_name} ({", ".join(columns)}) VALUES ({placeholders})'
-        cursor = conn.connection.execute(query, values)
-        return cursor.lastrowid
-
-    if table_name != 'reports':
-        raise NotImplementedError(f'Unsupported MongoDB insert table: {table_name}')
-    report_id = get_next_sequence(conn, 'reports')
-    document = {column: value for column, value in zip(columns, values)}
-    document.update({
-        'id': report_id,
-        'upload_date': now_utc(),
-        'analyzed': False
-    })
-    conn.db.reports.insert_one(document)
-    return report_id
+    placeholders = ', '.join('?' for _ in values)
+    query = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({placeholders})"
+    cursor = conn.execute(query, values)
+    return cursor.lastrowid
 
 
 def get_db_connection():
-    if app.config.get('DB_BACKEND') == 'mongo':
-        ensure_mongodb_ready()
-        client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
-        return MongoConnection(client, client[MONGODB_DB_NAME])
-
-    connection = sqlite3.connect(SQLITE_DB_PATH)
-    connection.row_factory = sqlite3.Row
-    return SQLiteConnection(connection)
+    ensure_sqlite_ready()
+    conn = sqlite3.connect(SQLITE_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
 def normalize_report_filepaths(conn):
@@ -292,69 +131,50 @@ def migrate_legacy_storage():
 
 def init_db():
     conn = get_db_connection()
-    if is_mongo_connection(conn):
-        conn.db.users.create_index([('id', ASCENDING)], unique=True)
-        conn.db.users.create_index([('email', ASCENDING)], unique=True)
-        conn.db.reports.create_index([('id', ASCENDING)], unique=True)
-        conn.db.reports.create_index([('user_id', ASCENDING), ('upload_date', DESCENDING)])
-        conn.db.analysis_results.create_index([('id', ASCENDING)], unique=True)
-        conn.db.analysis_results.create_index([('report_id', ASCENDING)], unique=True)
-    else:
-        conn.connection.executescript(
-            '''
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                email TEXT NOT NULL UNIQUE,
-                mobile TEXT NOT NULL,
-                password TEXT NOT NULL,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS reports (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                filename TEXT NOT NULL,
-                filepath TEXT NOT NULL,
-                file_type TEXT NOT NULL,
-                upload_date TEXT DEFAULT CURRENT_TIMESTAMP,
-                analyzed INTEGER DEFAULT 0
-            );
-
-            CREATE TABLE IF NOT EXISTS analysis_results (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                report_id INTEGER NOT NULL UNIQUE,
-                extracted_text TEXT,
-                medical_values TEXT,
-                abnormal_findings TEXT,
-                risk_level TEXT,
-                suggestions TEXT,
-                analysis_date TEXT DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_reports_user_date
-            ON reports(user_id, upload_date DESC);
-            '''
-        )
+    conn.execute(
+        '''CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            email TEXT NOT NULL UNIQUE,
+            mobile TEXT NOT NULL,
+            password TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )'''
+    )
+    conn.execute(
+        '''CREATE TABLE IF NOT EXISTS reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            filename TEXT NOT NULL,
+            filepath TEXT NOT NULL,
+            file_type TEXT NOT NULL,
+            upload_date TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            analyzed INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )'''
+    )
+    conn.execute(
+        '''CREATE TABLE IF NOT EXISTS analysis_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            report_id INTEGER NOT NULL UNIQUE,
+            extracted_text TEXT,
+            medical_values TEXT,
+            abnormal_findings TEXT,
+            risk_level TEXT,
+            suggestions TEXT,
+            analysis_date TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (report_id) REFERENCES reports (id)
+        )'''
+    )
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_reports_user_upload_date ON reports(user_id, upload_date DESC)')
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_analysis_report_id ON analysis_results(report_id)')
     normalize_report_filepaths(conn)
     conn.commit()
     conn.close()
 
 
-def try_initialize_mongo():
-    ensure_mongodb_ready()
-    client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
-    client.admin.command('ping')
-    conn = MongoConnection(client, client[MONGODB_DB_NAME])
-    conn.db.users.create_index([('id', ASCENDING)], unique=True)
-    conn.db.users.create_index([('email', ASCENDING)], unique=True)
-    conn.db.reports.create_index([('id', ASCENDING)], unique=True)
-    conn.db.reports.create_index([('user_id', ASCENDING), ('upload_date', DESCENDING)])
-    conn.db.analysis_results.create_index([('id', ASCENDING)], unique=True)
-    conn.db.analysis_results.create_index([('report_id', ASCENDING)], unique=True)
-    normalize_report_filepaths(conn)
-    conn.commit()
-    conn.close()
+def try_initialize_sqlite():
+    init_db()
 
 
 def initialize_app_once():
@@ -367,22 +187,18 @@ def initialize_app_once():
         if _startup_initialized:
             return
         migrate_legacy_storage()
-        startup_error = None
         try:
-            try_initialize_mongo()
-            app.config['DB_BACKEND'] = 'mongo'
+            try_initialize_sqlite()
+            app.config['STARTUP_ERROR'] = None
         except Exception as exc:
-            startup_error = db_error_message(exc)
-            app.config['DB_BACKEND'] = 'sqlite'
-            init_db()
-        app.config['STARTUP_ERROR'] = startup_error if app.config['DB_BACKEND'] == 'mongo' else None
+            app.config['STARTUP_ERROR'] = db_error_message(exc)
         _startup_initialized = True
 
 
 def db_error_message(exc):
     return (
-        'Database connection failed. On Render, set valid '
-        'MONGODB_URI and MONGODB_DB_NAME environment variables.'
+        'SQLite database initialization failed. Set a valid SQLITE_DB_PATH '
+        f'environment variable if needed. Details: {exc}'
     )
 
 
@@ -745,6 +561,197 @@ def build_patient_guidance(report):
     }
 
 
+def build_easy_language_report_text(report, guidance, structured_values, language_support, language_code='en'):
+    option_map = {option['code']: option for option in language_support['options']}
+    selected_language = option_map.get(language_code, option_map['en'])
+    lines = [
+        'AI Medical Analyzer - Easy Language Report',
+        '',
+        f'Original file: {report["filename"]}',
+        f'Report date: {report.get("analysis_date") or report.get("upload_date") or "Not available"}',
+        f'Risk level: {report.get("risk_level") or "LOW"}',
+        '',
+        'Simple summary',
+        guidance['summary'],
+        '',
+        'What this means',
+        guidance['simple_explanation'],
+    ]
+
+    if structured_values:
+        lines.extend([
+            '',
+            'Important values',
+        ])
+        for index, item in enumerate(structured_values[:6], start=1):
+            lines.extend([
+                f'{index}. {item["test"]}: {item["value"]} {item["unit"]}',
+                f'   Status: {item["status"]}',
+                f'   Normal range: {item["range"]}',
+                f'   Meaning: {item["meaning"]}',
+                f'   Why it matters: {item["why_it_matters"]}',
+            ])
+
+    if guidance['doctor_questions']:
+        lines.extend([
+            '',
+            'Questions to ask your doctor',
+        ])
+        for index, question in enumerate(guidance['doctor_questions'], start=1):
+            lines.append(f'{index}. {question}')
+
+    if selected_language:
+        lines.extend([
+            '',
+            f'Translated help: {selected_language["label"]}',
+            selected_language['summary'],
+        ])
+        if selected_language['values']:
+            lines.extend([
+                '',
+                selected_language['values_title'],
+            ])
+            for index, value in enumerate(selected_language['values'], start=1):
+                lines.append(f'{index}. {value}')
+
+    lines.extend([
+        '',
+        'Medical note',
+        'This report is educational support only and does not replace a doctor.',
+    ])
+    return '\n'.join(lines)
+
+
+def get_pdf_font_name(language_code):
+    if language_code not in {'hi', 'mr'}:
+        return 'Helvetica'
+
+    font_name = 'NirmalaUI'
+    if font_name in pdfmetrics.getRegisteredFontNames():
+        return font_name
+
+    font_path = r'C:\Windows\Fonts\Nirmala.ttc'
+    if os.path.exists(font_path):
+        pdfmetrics.registerFont(TTFont(font_name, font_path))
+        return font_name
+    return 'Helvetica'
+
+
+def build_easy_language_report_pdf(report, guidance, structured_values, language_support, language_code='en'):
+    option_map = {option['code']: option for option in language_support['options']}
+    selected_language = option_map.get(language_code, option_map['en'])
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=40,
+        leftMargin=40,
+        topMargin=42,
+        bottomMargin=36
+    )
+
+    font_name = get_pdf_font_name(language_code)
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'ReportTitle',
+        parent=styles['Heading1'],
+        fontName=font_name,
+        fontSize=18,
+        leading=22,
+        textColor=colors.HexColor('#183b78'),
+        spaceAfter=8
+    )
+    section_style = ParagraphStyle(
+        'ReportSection',
+        parent=styles['Heading2'],
+        fontName=font_name,
+        fontSize=13,
+        leading=16,
+        textColor=colors.HexColor('#244a8f'),
+        spaceBefore=8,
+        spaceAfter=6
+    )
+    body_style = ParagraphStyle(
+        'ReportBody',
+        parent=styles['BodyText'],
+        fontName=font_name,
+        fontSize=10.5,
+        leading=15,
+        textColor=colors.HexColor('#243244'),
+        spaceAfter=6
+    )
+    meta_style = ParagraphStyle(
+        'ReportMeta',
+        parent=body_style,
+        fontSize=9.5,
+        textColor=colors.HexColor('#5d6b82'),
+        spaceAfter=4
+    )
+
+    story = [
+        Paragraph('AI Medical Analyzer - Easy Language Report', title_style),
+        Paragraph(f'Original file: {escape(report["filename"])}', meta_style),
+        Paragraph(f'Report date: {escape(str(report.get("analysis_date") or report.get("upload_date") or "Not available"))}', meta_style),
+        Paragraph(f'Risk level: {escape(report.get("risk_level") or "LOW")}', meta_style),
+        Spacer(1, 0.12 * inch),
+        Paragraph('Simple summary', section_style),
+        Paragraph(escape(guidance['summary']), body_style),
+        Paragraph('What this means', section_style),
+        Paragraph(escape(guidance['simple_explanation']), body_style),
+    ]
+
+    if structured_values:
+        story.append(Paragraph('Important values', section_style))
+        for item in structured_values[:6]:
+            story.extend([
+                Paragraph(
+                    f'<b>{escape(item["test"])}</b>: {escape(item["value"])} {escape(item["unit"])}',
+                    body_style
+                ),
+                Paragraph(f'Status: {escape(item["status"])} | Normal range: {escape(item["range"])}', body_style),
+                Paragraph(f'Meaning: {escape(item["meaning"])}', body_style),
+                Paragraph(f'Why it matters: {escape(item["why_it_matters"])}', body_style),
+                Spacer(1, 0.08 * inch),
+            ])
+
+    if guidance['doctor_questions']:
+        story.append(Paragraph('Questions to ask your doctor', section_style))
+        story.append(
+            ListFlowable(
+                [ListItem(Paragraph(escape(question), body_style)) for question in guidance['doctor_questions']],
+                bulletType='1',
+                leftIndent=16
+            )
+        )
+
+    story.extend([
+        Spacer(1, 0.12 * inch),
+        Paragraph(f'Translated help: {escape(selected_language["label"])}', section_style),
+        Paragraph(escape(selected_language['summary']), body_style),
+    ])
+
+    if selected_language['values']:
+        story.append(Paragraph(escape(selected_language['values_title']), section_style))
+        story.append(
+            ListFlowable(
+                [ListItem(Paragraph(escape(value), body_style)) for value in selected_language['values']],
+                bulletType='1',
+                leftIndent=16
+            )
+        )
+
+    story.extend([
+        Spacer(1, 0.14 * inch),
+        Paragraph('Medical note', section_style),
+        Paragraph('This report is educational support only and does not replace a doctor.', body_style),
+    ])
+
+    doc.build(story)
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+    return pdf_bytes
+
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -978,6 +985,40 @@ def view_analysis(report_id):
     )
 
 
+@app.route('/analysis/<int:report_id>/download')
+@login_required
+def download_analysis_report(report_id):
+    language_code = request.args.get('lang', 'en').strip().lower() or 'en'
+    conn = get_db_connection()
+    report = db_fetchone(
+        conn,
+        '''SELECT r.*, a.* FROM reports r
+        LEFT JOIN analysis_results a ON r.id = a.report_id
+        WHERE r.id = ? AND r.user_id = ?''',
+        (report_id, session['user_id'])
+    )
+    conn.close()
+    if not report:
+        flash('Not found', 'danger')
+        return redirect(url_for('dashboard'))
+
+    guidance = build_patient_guidance(report)
+    structured_values = parse_medical_values(report['medical_values'] or '')
+    language_support = build_local_language_support(report, guidance, structured_values)
+    pdf_bytes = build_easy_language_report_pdf(
+        report,
+        guidance,
+        structured_values,
+        language_support,
+        language_code=language_code
+    )
+    safe_name = re.sub(r'[^a-zA-Z0-9_-]+', '_', os.path.splitext(report['filename'])[0]).strip('_') or f'report_{report_id}'
+    response = make_response(pdf_bytes)
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'attachment; filename={safe_name}_easy_report_{language_code}.pdf'
+    return response
+
+
 @app.route('/history')
 @login_required
 def history():
@@ -994,8 +1035,9 @@ def history():
 
 
 if __name__ == '__main__':
-    migrate_legacy_storage()
-    init_db()
+    initialize_app_once()
     print('AI Medical Analyzer - FREE VERSION')
     print('http://localhost:5000')
+    if app.config.get('STARTUP_ERROR'):
+        print(app.config['STARTUP_ERROR'])
     app.run(debug=True, host='0.0.0.0', port=5000)

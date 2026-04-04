@@ -421,6 +421,10 @@
             display: none;
         }
 
+        .download-link {
+            white-space: nowrap;
+        }
+
         .explain-box {
             margin-bottom: 1rem;
             padding: 1rem;
@@ -691,7 +695,16 @@
                                 <option value="{{ option['code'] }}">{{ option['label'] }}</option>
                                 {% endfor %}
                             </select>
-                            <button type="button" class="btn btn-outline-info btn-sm" id="copy-translation-btn">Copy Translation</button>
+                            <div class="d-flex flex-wrap gap-2">
+                                <button type="button" class="btn btn-outline-info btn-sm" id="copy-translation-btn">Copy Translation</button>
+                                <a
+                                    id="download-easy-report-btn"
+                                    class="btn btn-success btn-sm download-link"
+                                    href="{{ url_for('download_analysis_report', report_id=report.id, lang=language_support.options[0]['code']) }}"
+                                >
+                                    <i class="fas fa-download"></i> Download Easy Report
+                                </a>
+                            </div>
                         </div>
 
                         {% for option in language_support.options %}
@@ -873,12 +886,16 @@
         }
 
         var copyTranslationButton = document.getElementById('copy-translation-btn');
+        var downloadEasyReportButton = document.getElementById('download-easy-report-btn');
         var translationCards = document.querySelectorAll('.translation-option');
 
         function showTranslation(languageCode) {
             translationCards.forEach(function(card) {
                 card.hidden = card.dataset.lang !== languageCode;
             });
+            if (downloadEasyReportButton) {
+                downloadEasyReportButton.href = "{{ url_for('download_analysis_report', report_id=report.id) }}" + '?lang=' + encodeURIComponent(languageCode);
+            }
         }
 
         if (translationSelect) {
