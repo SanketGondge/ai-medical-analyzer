@@ -84,12 +84,15 @@
 <body>
     <nav class="navbar navbar-dark bg-primary">
         <div class="container">
-            <a class="navbar-brand" href="{{ url_for('dashboard') }}">Medical Analyzer</a>
-            <a href="{{ url_for('logout') }}" class="btn btn-light btn-sm">Logout</a>
+            <a class="navbar-brand" href="{{ url_for('dashboard') }}">{{ ui_text('app_name') }}</a>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('profile') }}" class="btn btn-outline-light btn-sm">{{ ui_text('profile') }}</a>
+                <a href="{{ url_for('logout') }}" class="btn btn-light btn-sm">{{ ui_text('logout') }}</a>
+            </div>
         </div>
     </nav>
     <div class="container upload-shell">
-        <h2 class="upload-title">Upload Medical Report</h2>
+        <h2 class="upload-title">{{ ui_text('upload_report') }}</h2>
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}

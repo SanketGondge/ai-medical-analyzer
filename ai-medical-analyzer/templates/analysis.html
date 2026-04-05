@@ -477,6 +477,14 @@
             margin-top: 1.4rem;
         }
 
+        .meta-card {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            border-radius: 18px;
+            background: linear-gradient(135deg, #f8fafc, #eff6ff);
+            border: 1px solid #dbeafe;
+        }
+
         @media (max-width: 991px) {
             .hero-grid,
             .content-grid {
@@ -510,8 +518,19 @@
 <body>
     <nav class="navbar navbar-dark bg-primary">
         <div class="container">
-            <a class="navbar-brand" href="{{ url_for('dashboard') }}">Medical Analyzer</a>
-            <a href="{{ url_for('logout') }}" class="btn btn-light btn-sm">Logout</a>
+            <a class="navbar-brand" href="{{ url_for('dashboard') }}">{{ ui_text('app_name') }}</a>
+            <div class="d-flex gap-2 align-items-center">
+                <form method="POST" action="{{ url_for('set_language') }}">
+                    <input type="hidden" name="next" value="{{ request.path }}">
+                    <select name="language" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="en" {% if ui_language == 'en' %}selected{% endif %}>{{ ui_text('english') }}</option>
+                        <option value="hi" {% if ui_language == 'hi' %}selected{% endif %}>{{ ui_text('hindi') }}</option>
+                        <option value="mr" {% if ui_language == 'mr' %}selected{% endif %}>{{ ui_text('marathi') }}</option>
+                    </select>
+                </form>
+                <a href="{{ url_for('profile') }}" class="btn btn-outline-light btn-sm">{{ ui_text('profile') }}</a>
+                <a href="{{ url_for('logout') }}" class="btn btn-light btn-sm">{{ ui_text('logout') }}</a>
+            </div>
         </div>
     </nav>
 
@@ -680,6 +699,26 @@
             </div>
 
             <aside class="support-stack">
+                <section class="support-card">
+                    <h3 class="support-title mb-3">{{ ui_text('ocr_quality') }}</h3>
+                    <div class="meta-card">
+                        <div class="fw-bold">{{ report.ocr_quality_label or 'Low' }}</div>
+                        <div class="text-muted small">{{ ui_text('character_count') }}: {{ report.ocr_character_count or 0 }}</div>
+                        <p class="mb-0 mt-2">{{ ocr_quality_message }}</p>
+                    </div>
+                    <form method="POST" action="{{ url_for('save_reminder', report_id=report.id) }}">
+                        <div class="mb-3">
+                            <label class="form-label">{{ ui_text('follow_up_date') }}</label>
+                            <input type="date" name="follow_up_date" class="form-control" value="{{ report.follow_up_date or '' }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">{{ ui_text('reminder_note') }}</label>
+                            <textarea name="reminder_note" class="form-control" rows="3" placeholder="Doctor visit, repeat blood test, fasting sample...">{{ report.reminder_note or '' }}</textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">{{ ui_text('save_reminder') }}</button>
+                    </form>
+                </section>
+
                 <section class="support-card">
                     <div class="support-header">
                         <div>

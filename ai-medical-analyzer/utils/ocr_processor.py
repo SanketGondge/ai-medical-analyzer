@@ -1,6 +1,15 @@
 """OCR Processor for medical reports"""
 import os
 
+
+def build_ocr_payload(text):
+    cleaned_text = text or ""
+    return {
+        "text": cleaned_text,
+        "character_count": len(cleaned_text.strip()),
+    }
+
+
 def extract_text_from_file(filepath, file_type):
     """Extract text from PDF or Image"""
     try:
@@ -12,7 +21,7 @@ def extract_text_from_file(filepath, file_type):
                     text = ""
                     for page in reader.pages:
                         text += page.extract_text()
-                    return text
+                    return build_ocr_payload(text)
             except:
                 pass
         
@@ -28,16 +37,16 @@ def extract_text_from_file(filepath, file_type):
                     text = ""
                     for image in images:
                         text += pytesseract.image_to_string(image)
-                    return text
+                    return build_ocr_payload(text)
                 except:
                     pass
             else:
                 img = Image.open(filepath)
                 text = pytesseract.image_to_string(img)
-                return text
+                return build_ocr_payload(text)
         except Exception as e:
             print(f"OCR Error: {e}")
-            return "Sample Medical Report\nGlucose: 95 mg/dL\nCholesterol: 180 mg/dL\nHemoglobin: 14.5 g/dL"
+            return build_ocr_payload("Sample Medical Report\nGlucose: 95 mg/dL\nCholesterol: 180 mg/dL\nHemoglobin: 14.5 g/dL")
     except Exception as e:
         print(f"Extraction Error: {e}")
-        return "Error extracting text"
+        return build_ocr_payload("Error extracting text")

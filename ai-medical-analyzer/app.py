@@ -64,6 +64,159 @@ _startup_initialized = False
 app.config['DB_BACKEND'] = 'sqlite'
 app.config['STARTUP_ERROR'] = None
 
+UI_TRANSLATIONS = {
+    'en': {
+        'app_name': 'Medical Analyzer',
+        'dashboard': 'Dashboard',
+        'history': 'History',
+        'profile': 'Profile',
+        'logout': 'Logout',
+        'upload_report': 'Upload Report',
+        'upload_new_report': 'Upload New Report',
+        'back_to_dashboard': 'Back to Dashboard',
+        'report_history': 'Report History',
+        'search_reports': 'Search reports',
+        'risk_level': 'Risk Level',
+        'date_from': 'Date From',
+        'date_to': 'Date To',
+        'apply_filters': 'Apply Filters',
+        'clear': 'Clear',
+        'delete': 'Delete',
+        'view': 'View',
+        'analyze': 'Analyze',
+        'not_analyzed': 'Not Analyzed',
+        'recent_reports': 'Recent Reports',
+        'total_reports': 'Total Reports',
+        'analyzed_reports': 'Analyzed Reports',
+        'upcoming_reminders': 'Upcoming Reminders',
+        'follow_up_date': 'Follow-up Date',
+        'reminder_note': 'Reminder Note',
+        'save_reminder': 'Save Reminder',
+        'language': 'Language',
+        'english': 'English',
+        'hindi': 'Hindi',
+        'marathi': 'Marathi',
+        'admin_panel': 'Admin Panel',
+        'admin_login': 'Admin Login',
+        'users': 'Users',
+        'reports': 'Reports',
+        'report_count': 'Report Count',
+        'flag': 'Flag',
+        'flagged': 'Flagged',
+        'ocr_quality': 'OCR Quality',
+        'character_count': 'Character Count',
+        'quality_warning': 'The extracted text looks short, so the analysis may be less reliable.',
+        'quality_good': 'The OCR output looks detailed enough for a normal analysis pass.',
+        'quality_fair': 'The OCR output is usable, but double-check the extracted text for missing details.',
+        'profile_settings': 'Profile Settings',
+        'full_name': 'Full Name',
+        'mobile_number': 'Mobile Number',
+        'new_password': 'New Password',
+        'confirm_password': 'Confirm Password',
+        'update_profile': 'Update Profile',
+    },
+    'hi': {
+        'app_name': 'मेडिकल एनालाइज़र',
+        'dashboard': 'डैशबोर्ड',
+        'history': 'इतिहास',
+        'profile': 'प्रोफाइल',
+        'logout': 'लॉगआउट',
+        'upload_report': 'रिपोर्ट अपलोड करें',
+        'upload_new_report': 'नई रिपोर्ट अपलोड करें',
+        'back_to_dashboard': 'डैशबोर्ड पर वापस जाएं',
+        'report_history': 'रिपोर्ट इतिहास',
+        'search_reports': 'रिपोर्ट खोजें',
+        'risk_level': 'रिस्क लेवल',
+        'date_from': 'शुरुआती तारीख',
+        'date_to': 'अंतिम तारीख',
+        'apply_filters': 'फिल्टर लागू करें',
+        'clear': 'साफ करें',
+        'delete': 'हटाएं',
+        'view': 'देखें',
+        'analyze': 'विश्लेषण करें',
+        'not_analyzed': 'विश्लेषण नहीं हुआ',
+        'recent_reports': 'हाल की रिपोर्ट',
+        'total_reports': 'कुल रिपोर्ट',
+        'analyzed_reports': 'विश्लेषित रिपोर्ट',
+        'upcoming_reminders': 'आगामी रिमाइंडर',
+        'follow_up_date': 'फॉलो-अप तारीख',
+        'reminder_note': 'रिमाइंडर नोट',
+        'save_reminder': 'रिमाइंडर सेव करें',
+        'language': 'भाषा',
+        'english': 'अंग्रेजी',
+        'hindi': 'हिंदी',
+        'marathi': 'मराठी',
+        'admin_panel': 'एडमिन पैनल',
+        'admin_login': 'एडमिन लॉगिन',
+        'users': 'यूज़र्स',
+        'reports': 'रिपोर्ट',
+        'report_count': 'रिपोर्ट संख्या',
+        'flag': 'फ्लैग करें',
+        'flagged': 'फ्लैग किया गया',
+        'ocr_quality': 'OCR गुणवत्ता',
+        'character_count': 'अक्षर संख्या',
+        'quality_warning': 'निकाला गया टेक्स्ट छोटा लग रहा है, इसलिए विश्लेषण कम भरोसेमंद हो सकता है।',
+        'quality_good': 'OCR आउटपुट सामान्य विश्लेषण के लिए पर्याप्त लग रहा है।',
+        'quality_fair': 'OCR आउटपुट उपयोगी है, लेकिन निकाले गए टेक्स्ट को एक बार जांच लें।',
+        'profile_settings': 'प्रोफाइल सेटिंग्स',
+        'full_name': 'पूरा नाम',
+        'mobile_number': 'मोबाइल नंबर',
+        'new_password': 'नया पासवर्ड',
+        'confirm_password': 'पासवर्ड की पुष्टि करें',
+        'update_profile': 'प्रोफाइल अपडेट करें',
+    },
+    'mr': {
+        'app_name': 'मेडिकल अॅनालायझर',
+        'dashboard': 'डॅशबोर्ड',
+        'history': 'इतिहास',
+        'profile': 'प्रोफाइल',
+        'logout': 'लॉगआउट',
+        'upload_report': 'रिपोर्ट अपलोड करा',
+        'upload_new_report': 'नवीन रिपोर्ट अपलोड करा',
+        'back_to_dashboard': 'डॅशबोर्डकडे परत जा',
+        'report_history': 'रिपोर्ट इतिहास',
+        'search_reports': 'रिपोर्ट शोधा',
+        'risk_level': 'जोखीम पातळी',
+        'date_from': 'सुरुवातीची तारीख',
+        'date_to': 'शेवटची तारीख',
+        'apply_filters': 'फिल्टर लागू करा',
+        'clear': 'साफ करा',
+        'delete': 'हटवा',
+        'view': 'पहा',
+        'analyze': 'विश्लेषण करा',
+        'not_analyzed': 'विश्लेषण झालेले नाही',
+        'recent_reports': 'अलीकडील रिपोर्ट',
+        'total_reports': 'एकूण रिपोर्ट',
+        'analyzed_reports': 'विश्लेषित रिपोर्ट',
+        'upcoming_reminders': 'आगामी स्मरणपत्रे',
+        'follow_up_date': 'फॉलो-अप तारीख',
+        'reminder_note': 'स्मरणपत्र टीप',
+        'save_reminder': 'स्मरणपत्र जतन करा',
+        'language': 'भाषा',
+        'english': 'इंग्रजी',
+        'hindi': 'हिंदी',
+        'marathi': 'मराठी',
+        'admin_panel': 'अॅडमिन पॅनेल',
+        'admin_login': 'अॅडमिन लॉगिन',
+        'users': 'वापरकर्ते',
+        'reports': 'रिपोर्ट',
+        'report_count': 'रिपोर्ट संख्या',
+        'flag': 'फ्लॅग करा',
+        'flagged': 'फ्लॅग केलेले',
+        'ocr_quality': 'OCR गुणवत्ता',
+        'character_count': 'अक्षर संख्या',
+        'quality_warning': 'काढलेला मजकूर खूप कमी वाटतो, त्यामुळे विश्लेषण कमी विश्वासार्ह असू शकते.',
+        'quality_good': 'OCR आउटपुट सामान्य विश्लेषणासाठी पुरेसे दिसते.',
+        'quality_fair': 'OCR आउटपुट उपयोगी आहे, पण काढलेला मजकूर पुन्हा तपासा.',
+        'profile_settings': 'प्रोफाइल सेटिंग्स',
+        'full_name': 'पूर्ण नाव',
+        'mobile_number': 'मोबाइल नंबर',
+        'new_password': 'नवीन पासवर्ड',
+        'confirm_password': 'पासवर्ड पुष्टी करा',
+        'update_profile': 'प्रोफाइल अपडेट करा',
+    },
+}
+
 
 def ensure_sqlite_ready():
     if not SQLITE_DB_PATH:
@@ -102,6 +255,57 @@ def get_db_connection():
     conn = sqlite3.connect(SQLITE_DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def table_columns(conn, table_name):
+    return {row['name'] for row in db_fetchall(conn, f'PRAGMA table_info({table_name})')}
+
+
+def ensure_column(conn, table_name, column_name, definition):
+    if column_name not in table_columns(conn, table_name):
+        conn.execute(f'ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}')
+
+
+def get_ui_language():
+    language_code = (session.get('ui_language') or 'en').strip().lower()
+    return language_code if language_code in UI_TRANSLATIONS else 'en'
+
+
+def ui_text(key, default=None):
+    language_code = get_ui_language()
+    return UI_TRANSLATIONS.get(language_code, UI_TRANSLATIONS['en']).get(
+        key,
+        UI_TRANSLATIONS['en'].get(key, default or key)
+    )
+
+
+def set_user_session(user):
+    session['user_id'] = user['id']
+    session['user_name'] = user['name']
+    session['is_admin'] = bool(user.get('is_admin'))
+
+
+def ocr_quality_label(character_count):
+    if character_count < 80:
+        return 'Low'
+    if character_count < 250:
+        return 'Medium'
+    return 'High'
+
+
+def ocr_quality_message(character_count):
+    label = ocr_quality_label(character_count)
+    if label == 'Low':
+        return ui_text('quality_warning')
+    if label == 'Medium':
+        return ui_text('quality_fair')
+    return ui_text('quality_good')
+
+
+def remove_report_assets(report):
+    file_path = report.get('filepath')
+    if file_path and os.path.isfile(file_path):
+        os.remove(file_path)
 
 
 def normalize_report_filepaths(conn):
@@ -166,8 +370,35 @@ def init_db():
             FOREIGN KEY (report_id) REFERENCES reports (id)
         )'''
     )
+    ensure_column(conn, 'users', 'is_admin', 'INTEGER NOT NULL DEFAULT 0')
+    ensure_column(conn, 'users', 'preferred_language', "TEXT NOT NULL DEFAULT 'en'")
+    ensure_column(conn, 'reports', 'follow_up_date', 'TEXT')
+    ensure_column(conn, 'reports', 'reminder_note', 'TEXT')
+    ensure_column(conn, 'reports', 'is_flagged', 'INTEGER NOT NULL DEFAULT 0')
+    ensure_column(conn, 'reports', 'flag_reason', 'TEXT')
+    ensure_column(conn, 'analysis_results', 'ocr_character_count', 'INTEGER NOT NULL DEFAULT 0')
+    ensure_column(conn, 'analysis_results', "ocr_quality_label", "TEXT NOT NULL DEFAULT 'Low'")
     conn.execute('CREATE INDEX IF NOT EXISTS idx_reports_user_upload_date ON reports(user_id, upload_date DESC)')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_analysis_report_id ON analysis_results(report_id)')
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_reports_follow_up_date ON reports(user_id, follow_up_date)')
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_reports_flagged ON reports(is_flagged)')
+    admin_email = (os.getenv('ADMIN_EMAIL') or 'admin@medical.local').strip().lower()
+    admin_password = os.getenv('ADMIN_PASSWORD') or 'admin12345'
+    admin_name = os.getenv('ADMIN_NAME') or 'Admin Demo'
+    admin_mobile = os.getenv('ADMIN_MOBILE') or '9876543210'
+    existing_admin = db_fetchone(conn, 'SELECT id FROM users WHERE email = ?', (admin_email,))
+    if existing_admin:
+        db_execute(
+            conn,
+            'UPDATE users SET name = ?, mobile = ?, password = ?, is_admin = 1 WHERE id = ?',
+            (admin_name, admin_mobile, hash_password(admin_password), existing_admin['id'])
+        )
+    else:
+        db_execute(
+            conn,
+            'INSERT INTO users (name, email, mobile, password, is_admin) VALUES (?, ?, ?, ?, 1)',
+            (admin_name, admin_email, admin_mobile, hash_password(admin_password))
+        )
     normalize_report_filepaths(conn)
     conn.commit()
     conn.close()
@@ -216,6 +447,17 @@ def login_required(f):
         if 'user_id' not in session:
             flash('Please login', 'warning')
             return redirect(url_for('login'))
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session or not session.get('is_admin'):
+            flash('Admin access required', 'danger')
+            return redirect(url_for('admin_login'))
         return f(*args, **kwargs)
 
     return decorated_function
@@ -764,6 +1006,35 @@ def ensure_app_ready():
         app.config['STARTUP_ERROR'] = None
     except Exception as exc:
         app.config['STARTUP_ERROR'] = db_error_message(exc)
+    if 'ui_language' not in session:
+        session['ui_language'] = 'en'
+
+
+@app.context_processor
+def inject_ui_helpers():
+    return {
+        'ui_text': ui_text,
+        'ui_language': get_ui_language(),
+    }
+
+
+@app.route('/set-language', methods=['POST'])
+def set_language():
+    language_code = request.form.get('language', 'en').strip().lower()
+    if language_code not in UI_TRANSLATIONS:
+        language_code = 'en'
+    session['ui_language'] = language_code
+    if session.get('user_id'):
+        conn = get_db_connection()
+        db_execute(
+            conn,
+            'UPDATE users SET preferred_language = ? WHERE id = ?',
+            (language_code, session['user_id'])
+        )
+        conn.commit()
+        conn.close()
+    next_url = request.form.get('next') or request.referrer or url_for('dashboard')
+    return redirect(next_url)
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -801,8 +1072,8 @@ def register():
                 return render_auth_template('register.html', startup_error, form_data=form_data)
             db_execute(
                 conn,
-                'INSERT INTO users (name, email, mobile, password) VALUES (?, ?, ?, ?)',
-                (name, email, mobile, hash_password(password))
+                'INSERT INTO users (name, email, mobile, password, preferred_language) VALUES (?, ?, ?, ?, ?)',
+                (name, email, mobile, hash_password(password), get_ui_language())
             )
             conn.commit()
             conn.close()
@@ -829,13 +1100,36 @@ def login():
             if not startup_error:
                 flash(db_error_message(exc), 'danger')
             return render_auth_template('login.html', startup_error)
-        if user and user['password'] == hash_password(password):
-            session['user_id'] = user['id']
-            session['user_name'] = user['name']
+        if user and not user.get('is_admin') and user['password'] == hash_password(password):
+            set_user_session(user)
+            session['ui_language'] = user.get('preferred_language') or 'en'
             flash(f'Welcome, {user["name"]}!', 'success')
             return redirect(url_for('dashboard'))
         flash('Invalid credentials', 'danger')
     return render_auth_template('login.html', startup_error)
+
+
+@app.route('/admin/login', methods=['GET', 'POST'])
+def admin_login():
+    startup_error = app.config.get('STARTUP_ERROR')
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '')
+        try:
+            conn = get_db_connection()
+            user = db_fetchone(conn, 'SELECT * FROM users WHERE email = ? AND is_admin = 1', (email,))
+            conn.close()
+        except Exception as exc:
+            if not startup_error:
+                flash(db_error_message(exc), 'danger')
+            return render_auth_template('login.html', startup_error, admin_mode=True)
+        if user and user['password'] == hash_password(password):
+            set_user_session(user)
+            session['ui_language'] = user.get('preferred_language') or 'en'
+            flash('Admin login successful', 'success')
+            return redirect(url_for('admin_panel'))
+        flash('Invalid admin credentials', 'danger')
+    return render_auth_template('login.html', startup_error, admin_mode=True)
 
 
 @app.route('/logout')
@@ -849,6 +1143,9 @@ def logout():
 @login_required
 def dashboard():
     conn = get_db_connection()
+    user = db_fetchone(conn, 'SELECT * FROM users WHERE id = ?', (session['user_id'],))
+    if user and user.get('preferred_language') and user['preferred_language'] != session.get('ui_language'):
+        session['ui_language'] = user['preferred_language']
     total = db_fetchone(
         conn,
         'SELECT COUNT(*) as c FROM reports WHERE user_id = ?',
@@ -864,13 +1161,82 @@ def dashboard():
         WHERE r.user_id = ? ORDER BY r.upload_date DESC'''
     recent_query += ' LIMIT 5'
     recent = db_fetchall(conn, recent_query, (session['user_id'],))
+    risk_breakdown_rows = db_fetchall(
+        conn,
+        '''SELECT COALESCE(a.risk_level, 'NOT_ANALYZED') AS risk_level, COUNT(*) AS total
+        FROM reports r
+        LEFT JOIN analysis_results a ON r.id = a.report_id
+        WHERE r.user_id = ?
+        GROUP BY COALESCE(a.risk_level, 'NOT_ANALYZED')
+        ORDER BY total DESC''',
+        (session['user_id'],)
+    )
+    reminders = db_fetchall(
+        conn,
+        '''SELECT id, filename, follow_up_date, reminder_note, analyzed
+        FROM reports
+        WHERE user_id = ? AND follow_up_date IS NOT NULL
+        ORDER BY follow_up_date ASC
+        LIMIT 5''',
+        (session['user_id'],)
+    )
     conn.close()
     return render_template(
         'dashboard.html',
         total_reports=total,
         analyzed_reports=analyzed,
-        recent_reports=recent
+        recent_reports=recent,
+        risk_breakdown=risk_breakdown_rows,
+        reminders=reminders,
+        current_user=user
     )
+
+
+@app.route('/profile', methods=['GET', 'POST'])
+@login_required
+def profile():
+    conn = get_db_connection()
+    user = db_fetchone(conn, 'SELECT * FROM users WHERE id = ?', (session['user_id'],))
+    if not user:
+        conn.close()
+        session.clear()
+        flash('Please login', 'warning')
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        mobile = request.form.get('mobile', '').strip()
+        password = request.form.get('password', '')
+        confirm_password = request.form.get('confirm_password', '')
+
+        if not name or not mobile:
+            flash('Name and mobile are required', 'danger')
+        elif not is_valid_indian_mobile(mobile):
+            flash('Enter a valid 10-digit Indian mobile number', 'danger')
+        elif password and len(password) < 8:
+            flash('Password must be at least 8 characters long', 'danger')
+        elif password and password != confirm_password:
+            flash('Passwords do not match', 'danger')
+        else:
+            if password:
+                db_execute(
+                    conn,
+                    'UPDATE users SET name = ?, mobile = ?, password = ? WHERE id = ?',
+                    (name, mobile, hash_password(password), session['user_id'])
+                )
+            else:
+                db_execute(
+                    conn,
+                    'UPDATE users SET name = ?, mobile = ? WHERE id = ?',
+                    (name, mobile, session['user_id'])
+                )
+            conn.commit()
+            session['user_name'] = name
+            user = db_fetchone(conn, 'SELECT * FROM users WHERE id = ?', (session['user_id'],))
+            flash('Profile updated successfully', 'success')
+
+    conn.close()
+    return render_template('profile.html', user=user)
 
 
 @app.route('/upload', methods=['GET', 'POST'])
@@ -924,22 +1290,31 @@ def analyze_report(report_id):
         conn.close()
         return redirect(url_for('view_analysis', report_id=report_id))
     try:
-        text = extract_text_from_file(report['filepath'], report['file_type'])
+        extraction = extract_text_from_file(report['filepath'], report['file_type'])
+        if isinstance(extraction, dict):
+            text = extraction.get('text', '')
+            character_count = extraction.get('character_count', len((extraction.get('text') or '').strip()))
+        else:
+            text = extraction
+            character_count = len((text or '').strip())
         if not text or len(text.strip()) < 10:
             text = 'Unable to extract text.'
+            character_count = len(text)
         analysis = analyze_medical_report(text)
         db_execute(
             conn,
             '''INSERT INTO analysis_results
-            (report_id, extracted_text, medical_values, abnormal_findings, risk_level, suggestions)
-            VALUES (?, ?, ?, ?, ?, ?)''',
+            (report_id, extracted_text, medical_values, abnormal_findings, risk_level, suggestions, ocr_character_count, ocr_quality_label)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
             (
                 report_id,
                 text,
                 analysis['medical_values'],
                 analysis['abnormal_findings'],
                 analysis['risk_level'],
-                analysis['suggestions']
+                analysis['suggestions'],
+                character_count,
+                ocr_quality_label(character_count)
             )
         )
         db_execute(conn, 'UPDATE reports SET analyzed = 1 WHERE id = ?', (report_id,))
@@ -981,7 +1356,8 @@ def view_analysis(report_id):
         guidance=guidance,
         interactive_report=interactive_report,
         structured_values=structured_values,
-        language_support=language_support
+        language_support=language_support,
+        ocr_quality_message=ocr_quality_message(report.get('ocr_character_count') or 0)
     )
 
 
@@ -1019,19 +1395,149 @@ def download_analysis_report(report_id):
     return response
 
 
+@app.route('/analysis/<int:report_id>/reminder', methods=['POST'])
+@login_required
+def save_reminder(report_id):
+    follow_up_date = request.form.get('follow_up_date', '').strip()
+    reminder_note = request.form.get('reminder_note', '').strip()
+    conn = get_db_connection()
+    report = db_fetchone(
+        conn,
+        'SELECT id FROM reports WHERE id = ? AND user_id = ?',
+        (report_id, session['user_id'])
+    )
+    if not report:
+        conn.close()
+        flash('Not found', 'danger')
+        return redirect(url_for('dashboard'))
+    db_execute(
+        conn,
+        'UPDATE reports SET follow_up_date = ?, reminder_note = ? WHERE id = ?',
+        (follow_up_date or None, reminder_note or None, report_id)
+    )
+    conn.commit()
+    conn.close()
+    flash('Follow-up reminder saved', 'success')
+    return redirect(url_for('view_analysis', report_id=report_id))
+
+
 @app.route('/history')
 @login_required
 def history():
     conn = get_db_connection()
+    search_term = request.args.get('q', '').strip()
+    selected_risk = request.args.get('risk', '').strip().upper()
+    date_from = request.args.get('date_from', '').strip()
+    date_to = request.args.get('date_to', '').strip()
+    query = '''SELECT r.*, a.risk_level, a.analysis_date FROM reports r
+        LEFT JOIN analysis_results a ON r.id = a.report_id
+        WHERE r.user_id = ?'''
+    params = [session['user_id']]
+    if search_term:
+        query += ' AND r.filename LIKE ?'
+        params.append(f'%{search_term}%')
+    if selected_risk in {'LOW', 'MEDIUM', 'HIGH'}:
+        query += ' AND a.risk_level = ?'
+        params.append(selected_risk)
+    if date_from:
+        query += ' AND date(r.upload_date) >= date(?)'
+        params.append(date_from)
+    if date_to:
+        query += ' AND date(r.upload_date) <= date(?)'
+        params.append(date_to)
+    query += ' ORDER BY r.upload_date DESC'
+    reports = db_fetchall(conn, query, tuple(params))
+    conn.close()
+    filters = {
+        'q': search_term,
+        'risk': selected_risk,
+        'date_from': date_from,
+        'date_to': date_to,
+    }
+    return render_template('history.html', reports=reports, filters=filters)
+
+
+@app.route('/history/<int:report_id>/delete', methods=['POST'])
+@login_required
+def delete_report(report_id):
+    conn = get_db_connection()
+    report = db_fetchone(
+        conn,
+        'SELECT * FROM reports WHERE id = ? AND user_id = ?',
+        (report_id, session['user_id'])
+    )
+    if not report:
+        conn.close()
+        flash('Not found', 'danger')
+        return redirect(url_for('history'))
+    db_execute(conn, 'DELETE FROM analysis_results WHERE report_id = ?', (report_id,))
+    db_execute(conn, 'DELETE FROM reports WHERE id = ?', (report_id,))
+    conn.commit()
+    conn.close()
+    remove_report_assets(report)
+    flash('Report deleted successfully', 'success')
+    return redirect(url_for('history'))
+
+
+@app.route('/admin')
+@admin_required
+def admin_panel():
+    conn = get_db_connection()
+    users = db_fetchall(
+        conn,
+        '''SELECT u.id, u.name, u.email, u.mobile, u.created_at, u.is_admin, COUNT(r.id) AS report_count
+        FROM users u
+        LEFT JOIN reports r ON u.id = r.user_id
+        GROUP BY u.id
+        ORDER BY u.is_admin DESC, u.created_at DESC'''
+    )
     reports = db_fetchall(
         conn,
-        '''SELECT r.*, a.risk_level, a.analysis_date FROM reports r
-        LEFT JOIN analysis_results a ON r.id = a.report_id
-        WHERE r.user_id = ? ORDER BY r.upload_date DESC''',
-        (session['user_id'],)
+        '''SELECT r.id, r.filename, r.upload_date, r.is_flagged, r.flag_reason, r.follow_up_date,
+        u.name AS user_name, u.email AS user_email,
+        a.risk_level
+        FROM reports r
+        JOIN users u ON u.id = r.user_id
+        LEFT JOIN analysis_results a ON a.report_id = r.id
+        ORDER BY r.upload_date DESC
+        LIMIT 100'''
     )
     conn.close()
-    return render_template('history.html', reports=reports)
+    return render_template('admin.html', users=users, reports=reports)
+
+
+@app.route('/admin/reports/<int:report_id>/flag', methods=['POST'])
+@admin_required
+def admin_flag_report(report_id):
+    reason = request.form.get('flag_reason', '').strip() or 'Flagged by admin'
+    conn = get_db_connection()
+    db_execute(
+        conn,
+        'UPDATE reports SET is_flagged = 1, flag_reason = ? WHERE id = ?',
+        (reason, report_id)
+    )
+    conn.commit()
+    conn.close()
+    flash('Report flagged for review', 'warning')
+    return redirect(url_for('admin_panel'))
+
+
+@app.route('/admin/reports/<int:report_id>/delete', methods=['POST'])
+@admin_required
+def admin_delete_report(report_id):
+    conn = get_db_connection()
+    report = db_fetchone(conn, 'SELECT * FROM reports WHERE id = ?', (report_id,))
+    if report:
+        db_execute(conn, 'DELETE FROM analysis_results WHERE report_id = ?', (report_id,))
+        db_execute(conn, 'DELETE FROM reports WHERE id = ?', (report_id,))
+        conn.commit()
+    conn.close()
+    if report:
+        remove_report_assets(report)
+        flash('Report deleted from admin panel', 'success')
+    else:
+        flash('Report not found', 'danger')
+    return redirect(url_for('admin_panel'))
 
 
 if __name__ == '__main__':
