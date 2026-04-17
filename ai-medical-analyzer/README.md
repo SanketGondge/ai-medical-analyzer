@@ -77,5 +77,22 @@ http://localhost:5000
 - Rule-based AI analysis
 - Bootstrap
 
+## Project Structure
+```text
+ai-medical-analyzer/
+|-- frontend/
+|   |-- templates/
+|   `-- static/
+|-- backend/
+|   |-- app.py
+|   |-- check_db.py
+|   `-- utils/
+|-- database/
+|-- app.py
+`-- check_db.py
+```
+
+`frontend/` contains the UI files, `backend/` contains the Flask logic and helpers, and `database/` stores the SQLite database and backups.
+
 ## Note
 This project is for educational purposes only. Always consult a qualified healthcare professional.
