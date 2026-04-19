@@ -1274,8 +1274,8 @@ def upload():
 @app.route('/analyze/<int:report_id>')
 @login_required
 def analyze_report(report_id):
-    from backend.utils.ocr_processor import extract_text_from_file
-    from backend.utils.ai_analyzer import analyze_medical_report
+    from utils.ocr_processor import extract_text_from_file
+    from utils.ai_analyzer import analyze_medical_report
 
     conn = get_db_connection()
     report = db_fetchone(
